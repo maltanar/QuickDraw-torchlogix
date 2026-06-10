@@ -70,3 +70,4 @@ Dataset/*.npz
 *.bak
 DataUtils/class_names.txt
 Data/*.npy
+codegen/
