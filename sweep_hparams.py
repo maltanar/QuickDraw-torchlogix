@@ -13,24 +13,29 @@ from typing import Dict, List, Optional
 def build_runs() -> List[Dict]:
     runs = []
     run_id = 1
-    for channel_scale in [0.25]:
-        for bit_width in [2, 4, 8]:
-            per_channel_options = [True] if bit_width == 2 else [False]
+    for channel_scale in [1.0]:
+        for weight_bit_width in [1, 2, 4, 8]:
+            per_channel_options = [True] if weight_bit_width == 2 else [False]
             for per_channel in per_channel_options:
-                runs.append(
-                    {
-                        "run_id": run_id,
-                        "channel_scale": channel_scale,
-                        "bit_width": bit_width,
-                        "per_channel": per_channel,
-                        "quant_input": True,
-                        "export_qcdq": True,
-                        "ngpu": 0,
-                        "epochs": 15,
-                        "no_narrow_range": True,
-                    }
-                )
-                run_id += 1
+                for trial in range(1, 4):  # 3 trials
+                    epochs = 50 if weight_bit_width in [1, 2] else 15
+                    runs.append(
+                        {
+                            "run_id": run_id,
+                            "channel_scale": channel_scale,
+                            "weight_bit_width": weight_bit_width,
+                            "activation_bit_width": 8,
+                            "per_channel": per_channel,
+                            "trial": trial,
+                            "quant_input": True,
+                            "export_qonnx": weight_bit_width == 1,
+                            "export_qcdq": weight_bit_width != 1,
+                            "ngpu": 0,
+                            "epochs": epochs,
+                            "no_narrow_range": True,
+                        }
+                    )
+                    run_id += 1
     return runs
 
 
@@ -76,6 +81,26 @@ def parse_training_log(log_file: Path) -> Dict[str, Optional[float]]:
     }
 
 
+def find_training_log_file(log_dir: Path, config: Dict) -> Optional[Path]:
+    """Find the training log file produced by main_qat.py for a run."""
+    candidates = [
+        log_dir / f"log_w{config['weight_bit_width']}a{config['activation_bit_width']}.txt",
+        log_dir / f"log_{config['weight_bit_width']}bit.txt",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+
+    txt_logs = sorted(log_dir.glob("log*.txt"))
+    if len(txt_logs) == 1:
+        return txt_logs[0]
+    if len(txt_logs) > 1:
+        return txt_logs[-1]
+
+    return None
+
+
 def fmt_metric(value: Optional[float]) -> str:
     if value is None:
         return "NA"
@@ -86,13 +111,10 @@ def make_csv_report(results: List[Dict]) -> str:
     headers = [
         "run_id",
         "channel_scale",
-        "bit_width",
+        "weight_bit_width",
+        "activation_bit_width",
         "per_channel",
-        "quant_input",
-        "export_qcdq",
-        "ngpu",
-        "epochs",
-        "no_narrow_range",
+        "trial",
         "status",
         "best_test_accuracy",
         "final_test_accuracy",
@@ -108,13 +130,10 @@ def make_csv_report(results: List[Dict]) -> str:
         writer.writerow([
             str(r["run_id"]),
             str(r["channel_scale"]),
-            str(r["bit_width"]),
+            str(r["weight_bit_width"]),
+            str(r["activation_bit_width"]),
             str(to_int_flag(r["per_channel"])),
-            str(to_int_flag(r["quant_input"])),
-            str(to_int_flag(r["export_qcdq"])),
-            str(r["ngpu"]),
-            str(r["epochs"]),
-            str(to_int_flag(r["no_narrow_range"])),
+            str(r["trial"]),
             r["status"],
             fmt_metric(r.get("best_test_accuracy")),
             fmt_metric(r.get("final_test_accuracy")),
@@ -125,12 +144,53 @@ def make_csv_report(results: List[Dict]) -> str:
     return buf.getvalue()
 
 
+def append_result_to_csv(report_path: Path, result: Dict, is_first: bool) -> None:
+    """Append a single result row to the CSV file."""
+    headers = [
+        "run_id",
+        "channel_scale",
+        "weight_bit_width",
+        "activation_bit_width",
+        "per_channel",
+        "trial",
+        "status",
+        "best_test_accuracy",
+        "final_test_accuracy",
+        "final_test_loss",
+        "notes",
+    ]
+
+    buf = StringIO()
+    writer = csv.writer(buf)
+
+    if is_first:
+        writer.writerow(headers)
+
+    writer.writerow([
+        str(result["run_id"]),
+        str(result["channel_scale"]),
+        str(result["weight_bit_width"]),
+        str(result["activation_bit_width"]),
+        str(to_int_flag(result["per_channel"])),
+        str(result["trial"]),
+        result["status"],
+        fmt_metric(result.get("best_test_accuracy")),
+        fmt_metric(result.get("final_test_accuracy")),
+        fmt_metric(result.get("final_test_loss")),
+        result.get("notes", ""),
+    ])
+
+    with report_path.open("a", encoding="utf-8") as f:
+        f.write(buf.getvalue())
+
+
 def run_one(config: Dict, output_root: Path, dry_run: bool) -> Dict:
     run_name = (
         f"run_{config['run_id']:02d}"
         f"_cs{config['channel_scale']}"
-        f"_bw{config['bit_width']}"
+        f"_w{config['weight_bit_width']}a{config['activation_bit_width']}"
         f"_pc{to_int_flag(config['per_channel'])}"
+        f"_trial{config['trial']}"
     )
     run_dir = output_root / run_name
     save_dir = run_dir / "checkpoints"
@@ -144,10 +204,11 @@ def run_one(config: Dict, output_root: Path, dry_run: bool) -> Dict:
         "main_qat.py",
         "--channel_scale",
         str(config["channel_scale"]),
-        "--bit_width",
-        str(config["bit_width"]),
+        "--weight_bit_width",
+        str(config["weight_bit_width"]),
+        "--act_bit_width",
+        str(config["activation_bit_width"]),
         "--quant_input",
-        "--export_qcdq",
         "--ngpu",
         str(config["ngpu"]),
         "--epochs",
@@ -158,6 +219,10 @@ def run_one(config: Dict, output_root: Path, dry_run: bool) -> Dict:
         "--log",
         str(log_dir),
     ]
+    if config.get("export_qonnx"):
+        cmd.append("--export_qonnx")
+    if config.get("export_qcdq"):
+        cmd.append("--export_qcdq")
     if config["per_channel"]:
         cmd.append("--per_channel")
 
@@ -191,7 +256,16 @@ def run_one(config: Dict, output_root: Path, dry_run: bool) -> Dict:
         encoding="utf-8",
     )
 
-    metrics = parse_training_log(log_dir / f"log_{config['bit_width']}bit.txt")
+    log_file = find_training_log_file(log_dir, config)
+    metrics = (
+        parse_training_log(log_file)
+        if log_file is not None
+        else {
+            "best_test_accuracy": None,
+            "final_test_accuracy": None,
+            "final_test_loss": None,
+        }
+    )
     result.update(metrics)
     if completed.returncode == 0:
         result["status"] = "OK"
@@ -232,21 +306,22 @@ def main() -> int:
 
     runs = build_runs()
     results = []
+    report_path = output_root / "results.csv"
 
-    for config in runs:
+    for idx, config in enumerate(runs):
         print(
             f"[run {config['run_id']:02d}/{len(runs)}] "
             f"channel_scale={config['channel_scale']} "
-            f"bit_width={config['bit_width']} "
-            f"per_channel={to_int_flag(config['per_channel'])}"
+            f"weight_bits={config['weight_bit_width']} "
+            f"activation_bits={config['activation_bit_width']} "
+            f"per_channel={to_int_flag(config['per_channel'])} "
+            f"trial={config['trial']}"
         )
         result = run_one(config, output_root=output_root, dry_run=args.dry_run)
         results.append(result)
+        append_result_to_csv(report_path, result, is_first=(idx == 0))
 
-    report_csv = make_csv_report(results)
     report_path = output_root / "results.csv"
-    report_path.write_text(report_csv, encoding="utf-8")
-
     commands_path = output_root / "commands.txt"
     commands_path.write_text(
         "\n".join(r.get("command", "") for r in results) + "\n",
