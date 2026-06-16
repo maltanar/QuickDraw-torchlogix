@@ -2,11 +2,9 @@ import argparse
 import os
 import torch
 import json
-import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from tqdm import tqdm
-
 from Model.qnets import qtinycnn
 from DataUtils.load_data import QD_Dataset
 
@@ -69,7 +67,7 @@ def main():
     parser.add_argument('--log', type=str, default='./',
                         help='path of the log info.')
 
-    args = parser.parse_args()
+    args = parser.parse_args()    
 
     if not os.path.isdir(args.log):
         os.makedirs(args.log)
