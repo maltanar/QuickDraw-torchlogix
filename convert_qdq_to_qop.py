@@ -49,6 +49,17 @@ def is_int8_or_uint8(dtype):
     return dtype in (onnx.TensorProto.UINT8, onnx.TensorProto.INT8)
 
 
+def is_all_zero_initializer(graph, name):
+    """Return True if initializer `name` exists and all values are zero."""
+    if not name:
+        return False
+    init = get_initializer(graph, name)
+    if init is None:
+        return False
+    vals = np.asarray(numpy_helper.to_array(init))
+    return vals.size > 0 and np.all(vals == 0)
+
+
 def preprocess_brevitas_fc_patterns(graph):
     """Preprocess Brevitas FC quantized weights: Constant -> Cast -> DQ -> Transpose -> MatMul
 
@@ -569,13 +580,17 @@ def convert_qdq_to_qop(model_path, output_path):
 
             else:
                 # DequantizeLinear (x2) -> Conv  (no following QuantizeLinear)  =>  ConvInteger + Scaling
+                x_zp_for_int = x_zp if x_zp and not is_all_zero_initializer(graph, x_zp) else ""
+                w_zp_for_int = w_zp if w_zp and not is_all_zero_initializer(graph, w_zp) else ""
+
                 inputs = [x_q_name, w_q_name]
-                if x_zp:
-                    inputs.append(x_zp)
-                if w_zp:
-                    if not x_zp:
+                if x_zp_for_int or w_zp_for_int:
+                    if x_zp_for_int:
+                        inputs.append(x_zp_for_int)
+                    else:
                         inputs.append("")
-                    inputs.append(w_zp)
+                    if w_zp_for_int:
+                        inputs.append(w_zp_for_int)
 
                 conv_int_out = node.name + "_int_output"
                 new_node = helper.make_node(
@@ -719,13 +734,17 @@ def convert_qdq_to_qop(model_path, output_path):
 
             else:
                 # DequantizeLinear (x2) -> MatMul  (no following QuantizeLinear)  =>  MatMulInteger + Scaling
+                x_zp_for_int = x_zp if x_zp and not is_all_zero_initializer(graph, x_zp) else ""
+                w_zp_for_int = w_zp if w_zp and not is_all_zero_initializer(graph, w_zp) else ""
+
                 inputs = [x_q_name, w_q_name]
-                if x_zp:
-                    inputs.append(x_zp)
-                if w_zp:
-                    if not x_zp:
+                if x_zp_for_int or w_zp_for_int:
+                    if x_zp_for_int:
+                        inputs.append(x_zp_for_int)
+                    else:
                         inputs.append("")  # pad x_zp slot
-                    inputs.append(w_zp)
+                    if w_zp_for_int:
+                        inputs.append(w_zp_for_int)
 
                 matmul_int_out = node.name + "_int_output"
                 new_node = helper.make_node(
