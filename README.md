@@ -1,6 +1,6 @@
 # QuickDraw-brevitas
 
-Train Quick, Draw! classifiers with PyTorch and run quantization-aware training (QAT) with Brevitas. The repo is installable as a standard Python project in a virtual environment, or inside Docker.
+Train Quick, Draw! classifiers with PyTorch and run quantization-aware training (QAT) with Brevitas. The repo is installable as a standard Python project in a virtual environment.
 
 ## Quick Start (venv)
 
@@ -53,7 +53,39 @@ quickdraw-qat-train --ngpu 0 -e 15 --weight_bit_width 8 --act_bit_width 8 --quan
 quickdraw-convert-qdq-to-qop Checkpoints/model_8bit_qcdq.onnx Checkpoints/model_8bit_qop.onnx
 ```
 
-5. Run QAT (1-bit weights, 8-bit activations) for 50 eopchs and export to QONNX:
+5. (Optional) Generate C code (and executable stats) from an ONNX checkpoint:
+
+```bash
+bash codegen.sh model_w4a8_qop
+```
+
+`codegen.sh` takes the checkpoint **base name** under `Checkpoints/` (for example `model_w4a8_qop`), not a full `.onnx` filename.
+
+After running `codegen.sh`:
+
+1. Generated model source is available at `codegen/<model-name>/model.c`.
+2. If `arm-zephyr-eabi-gcc` is available in `PATH`, a compiled executable is generated at `codegen/<model-name>/model` and deployment-oriented section stats are printed.
+
+Example (`codegen.sh` output excerpt):
+
+```text
+=== Executable Deployment Stats: codegen/model_w4a8_qop/model ===
+File size:                   542400 bytes (530KiB)
+Code segment (.text*):       183216 bytes (179KiB)
+Read-only vars (.rodata*):   331392 bytes (324KiB)
+Writable init data (.data*): 4096 bytes (4.0KiB)
+Zero-init data (.bss*):      1024 bytes (1.0KiB)
+Static RAM (.data + .bss):   5120 bytes (5.0KiB)
+Flash image estimate:        518704 bytes (507KiB)
+```
+
+If the ARM Zephyr toolchain is installed but not on `PATH`, add it before running:
+
+```bash
+export PATH="<zephyr-sdk>/arm-zephyr-eabi/bin:$PATH"
+```
+
+6. Run QAT (1-bit weights, 8-bit activations) for 50 eopchs and export to QONNX:
 
 ```bash
 quickdraw-qat-train --ngpu 0 -e 50 --weight_bit_width 1 --act_bit_width 8 --quant_input  --export_qonnx --per_channel -lrs 5 -lrs 20
@@ -66,22 +98,6 @@ The shell helpers still work:
 ```bash
 bash run_experiments.sh
 bash run_2bit_experiments.sh
-```
-
-## Docker Workflow
-
-The Docker image now installs this project via `pyproject.toml` and the `full` extra.
-
-1. Build image:
-
-```bash
-docker build -t quickdraw-qat .
-```
-
-2. Run containerized experiments:
-
-```bash
-bash launch_docker.sh
 ```
 
 ## Dataset Notes
@@ -138,5 +154,6 @@ Note: integer class ids are assigned in the order files are loaded during datase
 1. [Train a model in tf.keras with Colab, and run it in the browser with TensorFlow.js](https://medium.com/tensorflow/train-on-google-colab-and-run-on-the-browser-a-case-study-8a45f9b1474e)
 2. [tfjs-converter](https://github.com/tensorflow/tfjs-converter)
 3. [pytorch2keras](https://github.com/nerox8664/pytorch2keras)
+4. [Original QuickDraw-pytorch repository](https://github.com/XJay18/QuickDraw-pytorch)
 
 
