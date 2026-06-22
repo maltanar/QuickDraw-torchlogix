@@ -62,10 +62,10 @@ bash codegen.sh model_w4a8_qop
 ```
 
 `codegen.sh` takes the checkpoint **base name** under `Checkpoints/` (for example `model_w4a8_qop`), not a full `.onnx` filename.
-6. Run TorchLogix logic-NN training (Quick, Draw! with a MNIST-style conv logic stack):
+6. Run TorchLogix logic-NN training examples:
 
 ```bash
-quickdraw-logic-train --ngpu 0 -e 10 --learning_rate 0.02 --conv_channels 16 --dense_dims 4000,4000 --tree_depth 2 --receptive_field_size 3 --tau 8.0 --input_binarization fixed
+quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10
 ```
 
 7. Run topology exploration over multiple logic architectures:
