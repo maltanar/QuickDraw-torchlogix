@@ -105,6 +105,42 @@ def build_parser():
     # Checkpoint / log
     parser.add_argument("--save_dir", "-s", type=str, default="./Checkpoints")
     parser.add_argument("--save_name", type=str, default="model_logic.pytorch")
+    parser.add_argument(
+        "--load_checkpoint",
+        type=str,
+        default="",
+        help="Optional path to a .pytorch checkpoint to resume/fine-tune from.",
+    )
+    parser.add_argument(
+        "--export_verilog",
+        action="store_true",
+        default=False,
+        help="Export trained logic model to Verilog after training.",
+    )
+    parser.add_argument(
+        "--verilog_path",
+        type=str,
+        default="./Checkpoints/model_logic.v",
+        help="Output path for Verilog when --export_verilog is set.",
+    )
+    parser.add_argument(
+        "--verilog_from_best",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Export Verilog from best validation checkpoint if available.",
+    )
+    parser.add_argument(
+        "--verilog_inline_single_use",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Forwarded to Circuit.get_verilog_code(inline_single_use=...).",
+    )
+    parser.add_argument(
+        "--no_verilog_simplify",
+        action="store_true",
+        default=False,
+        help="Disable circuit simplification before Verilog export.",
+    )
     parser.add_argument("--log", type=str, default="./")
     parser.add_argument("--log_file", type=str, default="log_logic.txt")
 
@@ -115,6 +151,60 @@ def _build_device(ngpu):
     if ngpu > 0 and torch.cuda.is_available():
         return torch.device("cuda")
     return torch.device("cpu")
+
+
+def _unwrap_model(model):
+    return model.module if isinstance(model, nn.DataParallel) else model
+
+
+def _load_checkpoint_into_model(model, checkpoint_path, device):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    if isinstance(checkpoint, dict) and "state_dict" in checkpoint:
+        state_dict = checkpoint["state_dict"]
+    else:
+        state_dict = checkpoint
+
+    target = _unwrap_model(model)
+    try:
+        target.load_state_dict(state_dict)
+    except RuntimeError:
+        # Handle checkpoints saved from DataParallel models.
+        if isinstance(state_dict, dict) and all(k.startswith("module.") for k in state_dict.keys()):
+            stripped = {k[len("module."):]: v for k, v in state_dict.items()}
+            target.load_state_dict(stripped)
+        else:
+            raise
+
+
+def _export_model_verilog(model, image_size, verilog_path, inline_single_use=False, simplify=True):
+    try:
+        import importlib
+
+        torchlogix_mod = importlib.import_module("torchlogix")
+        torchlogix_utils = importlib.import_module("torchlogix.utils")
+        Circuit = getattr(torchlogix_mod, "Circuit")
+        set_export_mode = getattr(torchlogix_utils, "set_export_mode")
+    except ImportError as exc:
+        raise ImportError(
+            "Verilog export requires torchlogix with Circuit export support. "
+            "Install or upgrade torchlogix."
+        ) from exc
+
+    model = model.cpu().eval()
+    set_export_mode(model)
+
+    circuit = Circuit.from_model(model, input_shape=(1, int(image_size), int(image_size)))
+    if simplify:
+        circuit.simplify()
+
+    verilog_code = circuit.get_verilog_code(inline_single_use=inline_single_use)
+    verilog_dir = os.path.dirname(verilog_path)
+    if verilog_dir:
+        os.makedirs(verilog_dir, exist_ok=True)
+    with open(verilog_path, "w", encoding="utf-8") as f:
+        f.write(verilog_code)
+
+    return verilog_path
 
 
 def _epoch_pass(model, loader, image_size, device, optimizer=None, desc="Eval", force_train=False, is_mnist=False):
@@ -293,6 +383,13 @@ def run_training(args):
         if args.ngpu > 1 and torch.cuda.device_count() > 1:
             model = nn.DataParallel(model)
 
+        if args.load_checkpoint:
+            if not os.path.isfile(args.load_checkpoint):
+                raise FileNotFoundError(f"Checkpoint not found: {args.load_checkpoint}")
+            _load_checkpoint_into_model(model, args.load_checkpoint, device)
+            print(f"Loaded checkpoint: {args.load_checkpoint}")
+            state["loaded_checkpoint"] = args.load_checkpoint
+
         print(model)
 
         if opt_name == "adamw":
@@ -367,9 +464,25 @@ def run_training(args):
             print(f"Best discrete accuracy: {best_accuracy:.4f}")
             print("*" * 50)
 
+        if args.export_verilog:
+            export_model = copy.deepcopy(_unwrap_model(model))
+            if args.verilog_from_best:
+                export_model.load_state_dict(best_state)
+
+            verilog_path = _export_model_verilog(
+                model=export_model,
+                image_size=args.image_size,
+                verilog_path=args.verilog_path,
+                inline_single_use=args.verilog_inline_single_use,
+                simplify=not args.no_verilog_simplify,
+            )
+            state["verilog_path"] = verilog_path
+            print(f"Exported Verilog: {verilog_path}")
+
     return {
         "best_accuracy": float(best_accuracy),
         "checkpoint": os.path.join(args.save_dir, args.save_name),
+        "verilog_path": args.verilog_path if args.export_verilog else "",
         "conv_channels": args.conv_channels,
         "dense_dims": args.dense_dims,
         "tree_depth": args.tree_depth,

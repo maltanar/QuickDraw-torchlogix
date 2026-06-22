@@ -68,6 +68,24 @@ bash codegen.sh model_w4a8_qop
 quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10
 ```
 
+Generate Verilog after training (exports best validation checkpoint by default):
+
+```bash
+quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --verilog_path Checkpoints/model_logic.v
+```
+
+Generate Verilog from the final model state instead of best validation checkpoint:
+
+```bash
+quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --no-verilog_from_best --verilog_path Checkpoints/model_logic_final.v
+```
+
+Resume from a saved checkpoint and then export Verilog:
+
+```bash
+quickdraw-logic-train --dataset mnist --load_checkpoint Checkpoints/model_logic.pytorch --ngpu 0 -e 5 --export_verilog --verilog_path Checkpoints/model_logic_resumed.v
+```
+
 7. Run topology exploration over multiple logic architectures:
 
 ```bash
