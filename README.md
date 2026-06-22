@@ -25,7 +25,9 @@ Installing the project creates these commands:
 1. `quickdraw-prepare-data`
 2. `quickdraw-train`
 3. `quickdraw-qat-train`
-4. `quickdraw-convert-qdq-to-qop`
+4. `quickdraw-logic-train`
+5. `quickdraw-logic-sweep`
+6. `quickdraw-convert-qdq-to-qop`
 
 ## Typical Local Workflow
 
@@ -60,6 +62,21 @@ bash codegen.sh model_w4a8_qop
 ```
 
 `codegen.sh` takes the checkpoint **base name** under `Checkpoints/` (for example `model_w4a8_qop`), not a full `.onnx` filename.
+6. Run TorchLogix logic-NN training (Quick, Draw! with a MNIST-style conv logic stack):
+
+```bash
+quickdraw-logic-train --ngpu 0 -e 10 --learning_rate 0.02 --conv_channels 16 --dense_dims 4000,4000 --tree_depth 2 --receptive_field_size 3 --tau 8.0 --input_binarization fixed
+```
+
+7. Run topology exploration over multiple logic architectures:
+
+```bash
+quickdraw-logic-sweep --ngpu 0 --epochs 5 --conv_channels_grid "16|16,48|16,48,144" --dense_dims_grid "1000,1000|2000,2000|4000,4000" --tree_depth_grid "2,3" --receptive_field_grid "3,5" --tau_grid "4.0,8.0"
+```
+
+The sweep writes per-trial logs and a global summary in `logic_sweep_logs/logic_sweep_summary.json`.
+
+## Existing Script Workflow
 
 After running `codegen.sh`:
 

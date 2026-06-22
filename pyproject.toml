@@ -24,6 +24,9 @@ dependencies = [
 qat = [
   "brevitas @ git+https://github.com/Xilinx/brevitas.git@dev"
 ]
+logic = [
+  "torchlogix>=0.1.1"
+]
 onnx = [
   "onnx>=1.16",
   "onnxscript>=0.1.0",
@@ -34,6 +37,7 @@ onnx = [
 ]
 full = [
   "brevitas @ git+https://github.com/Xilinx/brevitas.git@dev",
+  "torchlogix>=0.1.1",
   "onnx>=1.16",
   "onnxscript>=0.1.0",
   "qonnx>=1.0.0",
@@ -45,11 +49,13 @@ full = [
 [project.scripts]
 quickdraw-train = "main:main"
 quickdraw-qat-train = "main_qat:main"
+quickdraw-logic-train = "main_logic:main"
+quickdraw-logic-sweep = "sweep_logic_topology:main"
 quickdraw-prepare-data = "DataUtils.prepare_data:main"
 quickdraw-convert-qdq-to-qop = "convert_qdq_to_qop:main"
 
 [tool.setuptools]
-py-modules = ["main", "main_qat", "convert_qdq_to_qop"]
+py-modules = ["main", "main_qat", "main_logic", "sweep_logic_topology", "convert_qdq_to_qop"]
 
 [tool.setuptools.packages.find]
 include = ["DataUtils*", "Model*"]
