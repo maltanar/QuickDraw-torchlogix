@@ -67,6 +67,7 @@ Checkpoints/
 
 # Generated datasets / binaries
 Dataset/*.npz
+Dataset/MNIST
 *.bak
 DataUtils/class_names.txt
 Data/*.npy
