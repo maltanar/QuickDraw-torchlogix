@@ -86,6 +86,18 @@ Resume from a saved checkpoint and then export Verilog:
 quickdraw-logic-train --dataset mnist --load_checkpoint Checkpoints/model_logic.pytorch --ngpu 0 -e 5 --export_verilog --verilog_path Checkpoints/model_logic_resumed.v
 ```
 
+Instantiate a dense-only logic topology by passing an empty conv stage list and keeping the dense widths large enough for torchlogix connection coverage:
+
+```bash
+quickdraw-logic-train --dataset quickdraw --conv_channels "" --dense_dims 4000,4000 --input_binarization none --ngpu 0 -e 10
+```
+
+If you want to sweep dense-only candidates, include an empty entry in the conv grid:
+
+```bash
+quickdraw-logic-sweep --ngpu 0 --epochs 5 --conv_channels_grid "|16|16,48" --dense_dims_grid "4000,4000" --tree_depth_grid "2,3" --receptive_field_grid "3,5" --tau_grid "4.0,8.0"
+```
+
 7. Run topology exploration over multiple logic architectures:
 
 ```bash

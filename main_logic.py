@@ -13,9 +13,11 @@ from DataUtils.load_data import QD_Dataset
 from Model.logic_nets import mnist_tutorial_logic_convnet, quickdraw_logic_convnet
 
 
-def parse_int_list(csv_text):
+def parse_int_list(csv_text, allow_empty=False):
     values = [v.strip() for v in csv_text.split(",") if v.strip()]
     if not values:
+        if allow_empty:
+            return tuple()
         raise ValueError("Expected at least one integer value.")
     return tuple(int(v) for v in values)
 
@@ -181,19 +183,34 @@ def _export_model_verilog(model, image_size, verilog_path, inline_single_use=Fal
         import importlib
 
         torchlogix_mod = importlib.import_module("torchlogix")
-        torchlogix_utils = importlib.import_module("torchlogix.utils")
-        Circuit = getattr(torchlogix_mod, "Circuit")
-        set_export_mode = getattr(torchlogix_utils, "set_export_mode")
+        circuit_cls = getattr(torchlogix_mod, "Circuit", None)
+
+        # torchlogix versions differ on whether set_export_mode exists.
+        # Export can still work without it in some builds.
+        set_export_mode = None
+        try:
+            torchlogix_utils = importlib.import_module("torchlogix.utils")
+            set_export_mode = getattr(torchlogix_utils, "set_export_mode", None)
+        except ImportError:
+            pass
+
+        if circuit_cls is None:
+            raise ImportError(
+                "No 'Circuit' export API found in installed torchlogix package."
+            )
     except ImportError as exc:
         raise ImportError(
-            "Verilog export requires torchlogix with Circuit export support. "
-            "Install or upgrade torchlogix."
+            "Verilog export requires a torchlogix build exposing 'Circuit'. "
+            "Your installed torchlogix package does not provide that API. "
+            "Install/upgrade to a torchlogix version with circuit export support, "
+            "or run without --export_verilog."
         ) from exc
 
     model = model.cpu().eval()
-    set_export_mode(model)
+    if set_export_mode is not None:
+        set_export_mode(model)
 
-    circuit = Circuit.from_model(model, input_shape=(1, int(image_size), int(image_size)))
+    circuit = circuit_cls.from_model(model, input_shape=(1, int(image_size), int(image_size)))
     if simplify:
         circuit.simplify()
 
@@ -341,7 +358,7 @@ def run_training(args):
         print(f"Train images number: {len(train_data)}")
         print(f"Test images number: {len(test_data)}")
 
-        conv_channels = parse_int_list(args.conv_channels)
+        conv_channels = parse_int_list(args.conv_channels, allow_empty=True)
         dense_dims = parse_int_list(args.dense_dims)
 
         connections_kwargs = {}
@@ -469,15 +486,20 @@ def run_training(args):
             if args.verilog_from_best:
                 export_model.load_state_dict(best_state)
 
-            verilog_path = _export_model_verilog(
-                model=export_model,
-                image_size=args.image_size,
-                verilog_path=args.verilog_path,
-                inline_single_use=args.verilog_inline_single_use,
-                simplify=not args.no_verilog_simplify,
-            )
-            state["verilog_path"] = verilog_path
-            print(f"Exported Verilog: {verilog_path}")
+            try:
+                verilog_path = _export_model_verilog(
+                    model=export_model,
+                    image_size=args.image_size,
+                    verilog_path=args.verilog_path,
+                    inline_single_use=args.verilog_inline_single_use,
+                    simplify=not args.no_verilog_simplify,
+                )
+                state["verilog_path"] = verilog_path
+                print(f"Exported Verilog: {verilog_path}")
+            except ImportError as exc:
+                # Keep training successful even when optional export support is unavailable.
+                state["verilog_export_error"] = str(exc)
+                print(f"Skipping Verilog export: {exc}")
 
     return {
         "best_accuracy": float(best_accuracy),

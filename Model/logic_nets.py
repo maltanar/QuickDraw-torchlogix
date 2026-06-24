@@ -41,8 +41,6 @@ class QuickDrawLogicConvNet(nn.Module):
 
         if image_size <= 0:
             raise ValueError("image_size must be > 0")
-        if len(conv_channels) == 0:
-            raise ValueError("conv_channels must contain at least one layer width")
         if len(dense_dims) == 0:
             raise ValueError("dense_dims must contain at least one layer width")
 

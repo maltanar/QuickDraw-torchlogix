@@ -14,7 +14,7 @@ def parse_grid(spec, cast=str):
 
 def parse_topology_grid(spec):
     # Example: "16|16,48|16,48,144"
-    options = [x.strip() for x in spec.split("|") if x.strip()]
+    options = [x.strip() for x in spec.split("|")]
     if not options:
         raise ValueError("Topology grid cannot be empty.")
     return options
