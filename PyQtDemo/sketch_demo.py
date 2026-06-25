@@ -1,14 +1,39 @@
 import sys
 import numpy as np
-import onnxruntime as ort
+from pathlib import Path
+import pyverilator
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton
-from PyQt6.QtGui import QPainter, QPen, QImage, QColor
+from PyQt6.QtGui import QPainter, QPen, QImage
 from PyQt6.QtCore import Qt, QPoint, QTimer
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+
+
+def to_signed32(value):
+    if value & 0x80000000:
+        return value - (1 << 32)
+    return value
+
+
+def pack_binary_image_to_inp(gray_1x1x28x28, threshold=0.5):
+    # Flatten in row-major order and map each pixel to one input bit.
+    flat = (gray_1x1x28x28[0, 0].reshape(-1) > threshold).astype(np.uint8)
+    packed = 0
+    for i, bit in enumerate(flat):
+        if bit:
+            packed |= (1 << i)
+    return packed
+
+
+def unpack_scores(scores_flat):
+    scores = []
+    for i in range(10):
+        raw = (scores_flat >> (32 * i)) & 0xFFFFFFFF
+        scores.append(to_signed32(raw))
+    return np.array(scores, dtype=np.float32)
 
 class DrawingWidget(QWidget):
     def __init__(self, update_callback):
@@ -60,7 +85,7 @@ class DrawingWidget(QWidget):
         self.update_callback(img_array)
         
     def get_image_array(self):
-        # Scale to 28x28 for ONNX model input
+        # Scale to 28x28 for model input.
         scaled_img = self.image.scaled(28, 28, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
         
         gray = np.zeros((28, 28), dtype=np.float32)
@@ -68,21 +93,19 @@ class DrawingWidget(QWidget):
             for x in range(28):
                 gray[y, x] = scaled_img.pixelColor(x, y).red() / 255.0
         
-        # Expand dims for batch and channel: (batch=1, channel=1, height=28, width=28)
+        # Expand dims for batch and channel: (1, 1, 28, 28).
         gray = np.expand_dims(gray, axis=(0, 1))
-        print(gray.shape)
-        print(gray)
         return gray
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("EmLogic Sketch Recognition Demo")
-        
-        # Load ONNX model
-        model_path = "../Checkpoints/model_8bit_qcdq_clean.onnx"
-        self.session = ort.InferenceSession(model_path)
-        self.input_name = self.session.get_inputs()[0].name
+
+        # Build and load the Verilog model using pyverilator.
+        project_root = Path(__file__).resolve().parents[1]
+        verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
+        self.sim = pyverilator.PyVerilator.build(str(verilog_path), top_module_name="circuit")
         
         # Central widget
         central = QWidget()
@@ -122,13 +145,11 @@ class MainWindow(QMainWindow):
         
     def on_draw_update(self, img_array):
         try:
-            ort_inputs = {self.input_name: img_array}
-            ort_outs = self.session.run(None, ort_inputs)
-            logits = ort_outs[0][0]
-            
-            # Apply Softmax to get probabilities
-            print(CLASSES)
-            print(logits)
+            inp_value = pack_binary_image_to_inp(img_array)
+            self.sim.io.inp = inp_value
+            logits = unpack_scores(int(self.sim.io.scores_flat))
+
+            # Apply Softmax to get probabilities.
             exp_logits = np.exp(logits - np.max(logits))
             probs = exp_logits / exp_logits.sum()
         except Exception as e:

@@ -17,42 +17,17 @@ dependencies = [
   "torch>=2.1",
   "torchvision>=0.16",
   "tqdm>=4.64",
-  "matplotlib>=3.7"
-]
-
-[project.optional-dependencies]
-qat = [
-  "brevitas @ git+https://github.com/Xilinx/brevitas.git@dev"
-]
-logic = [
-  "torchlogix>=0.1.1"
-]
-onnx = [
-  "onnx>=1.16",
-  "onnxscript>=0.1.0",
-  "qonnx>=1.0.0",
-  "onnxoptimizer>=0.3.13",
-  "emx-onnx-cgen>=1.3.1",
-  "netron>=9.1.0"
-]
-full = [
-  "brevitas @ git+https://github.com/Xilinx/brevitas.git@dev",
-  "torchlogix>=0.1.1",
-  "onnx>=1.16",
-  "onnxscript>=0.1.0",
-  "qonnx>=1.0.0",
-  "onnxoptimizer>=0.3.13",
-  "emx-onnx-cgen>=1.3.1",
-  "netron>=9.1.0"
+  "matplotlib>=3.7",
+  "torchlogix @ git+https://github.com/ligerlac/torchlogix@main",
+  "pyverilator @ git+https://github.com/maltanar/pyverilator.git",
+  "PyQt6>=6.11.0"
 ]
 
 [project.scripts]
 quickdraw-train = "main:main"
-quickdraw-qat-train = "main_qat:main"
 quickdraw-logic-train = "main_logic:main"
 quickdraw-logic-sweep = "sweep_logic_topology:main"
 quickdraw-prepare-data = "DataUtils.prepare_data:main"
-quickdraw-convert-qdq-to-qop = "convert_qdq_to_qop:main"
 
 [tool.setuptools]
 py-modules = ["main", "main_qat", "main_logic", "sweep_logic_topology", "convert_qdq_to_qop"]
