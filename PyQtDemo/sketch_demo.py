@@ -2,7 +2,18 @@ import sys
 import numpy as np
 from pathlib import Path
 import pyverilator
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QPushButton
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 from PyQt6.QtGui import QPainter, QPen, QImage
 from PyQt6.QtCore import Qt, QPoint, QTimer
 
@@ -102,10 +113,15 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("EmLogic Sketch Recognition Demo")
 
-        # Build and load the Verilog model using pyverilator.
+        self.verilog_status_label = None
+        self.verilog_path_input = None
+        self.btn_browse_verilog = None
+        self.btn_load_verilog = None
+
+        # Build and load the default Verilog model using pyverilator.
         project_root = Path(__file__).resolve().parents[1]
-        verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
-        self.sim = pyverilator.PyVerilator.build(str(verilog_path), top_module_name="circuit")
+        self.verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
+        self.sim = None
         
         # Central widget
         central = QWidget()
@@ -115,6 +131,26 @@ class MainWindow(QMainWindow):
         
         # Left side layout
         left_layout = QVBoxLayout()
+
+        path_row = QHBoxLayout()
+        path_row.addWidget(QLabel("Verilog:"))
+        self.verilog_path_input = QLineEdit(str(self.verilog_path))
+        self.verilog_path_input.returnPressed.connect(self.on_apply_verilog_path)
+        path_row.addWidget(self.verilog_path_input)
+
+        self.btn_browse_verilog = QPushButton("Browse")
+        self.btn_browse_verilog.clicked.connect(self.on_browse_verilog)
+        path_row.addWidget(self.btn_browse_verilog)
+
+        self.btn_load_verilog = QPushButton("Load")
+        self.btn_load_verilog.clicked.connect(self.on_apply_verilog_path)
+        path_row.addWidget(self.btn_load_verilog)
+        left_layout.addLayout(path_row)
+
+        self.verilog_status_label = QLabel()
+        left_layout.addWidget(self.verilog_status_label)
+        self.set_verilog_status("Not loaded (press Load)", "gray")
+
         self.drawing_widget = DrawingWidget(self.on_draw_update)
         left_layout.addWidget(self.drawing_widget)
         
@@ -133,6 +169,60 @@ class MainWindow(QMainWindow):
         self.init_plot()
         self.drawing_widget.clear() # trigger initial plot 
 
+    def load_simulator(self, verilog_path):
+        verilog_path = Path(verilog_path).expanduser().resolve()
+        self.sim = pyverilator.PyVerilator.build(str(verilog_path), top_module_name="circuit")
+        self.verilog_path = verilog_path
+
+    def set_verilog_status(self, text, color):
+        if self.verilog_status_label is not None:
+            self.verilog_status_label.setText(f"Model status: {text}")
+            self.verilog_status_label.setStyleSheet(f"color: {color};")
+
+    def set_verilog_controls_enabled(self, enabled):
+        if self.verilog_path_input is not None:
+            self.verilog_path_input.setEnabled(enabled)
+        if self.btn_browse_verilog is not None:
+            self.btn_browse_verilog.setEnabled(enabled)
+        if self.btn_load_verilog is not None:
+            self.btn_load_verilog.setEnabled(enabled)
+
+    def on_browse_verilog(self):
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Verilog Model",
+            str(self.verilog_path.parent),
+            "Verilog Files (*.v);;All Files (*)",
+        )
+        if selected:
+            self.verilog_path_input.setText(selected)
+            self.on_apply_verilog_path()
+
+    def on_apply_verilog_path(self):
+        candidate_path = Path(self.verilog_path_input.text().strip())
+        if not candidate_path.exists():
+            self.set_verilog_status("File not found", "red")
+            QMessageBox.warning(self, "Invalid Path", f"Verilog file not found:\n{candidate_path}")
+            return
+
+        previous_sim = self.sim
+        previous_path = self.verilog_path
+        self.set_verilog_controls_enabled(False)
+        self.set_verilog_status("Compiling...", "orange")
+        QApplication.processEvents()
+        try:
+            self.load_simulator(candidate_path)
+            print(f"Loaded Verilog model: {self.verilog_path}")
+            self.set_verilog_status("Done", "green")
+        except Exception as e:
+            self.sim = previous_sim
+            self.verilog_path = previous_path
+            self.verilog_path_input.setText(str(previous_path))
+            self.set_verilog_status("Compile/load failed", "red")
+            QMessageBox.critical(self, "Load Error", f"Failed to load Verilog model:\n{e}")
+        finally:
+            self.set_verilog_controls_enabled(True)
+
     def init_plot(self):
         self.ax.clear()
         self.bars = self.ax.barh(CLASSES, np.zeros(10), color='skyblue')
@@ -145,13 +235,16 @@ class MainWindow(QMainWindow):
         
     def on_draw_update(self, img_array):
         try:
-            inp_value = pack_binary_image_to_inp(img_array)
-            self.sim.io.inp = inp_value
-            logits = unpack_scores(int(self.sim.io.scores_flat))
+            if self.sim is None:
+                probs = np.zeros(10)
+            else:
+                inp_value = pack_binary_image_to_inp(img_array)
+                self.sim.io.inp = inp_value
+                logits = unpack_scores(int(self.sim.io.scores_flat))
 
-            # Apply Softmax to get probabilities.
-            exp_logits = np.exp(logits - np.max(logits))
-            probs = exp_logits / exp_logits.sum()
+                # Apply Softmax to get probabilities.
+                exp_logits = np.exp(logits - np.max(logits))
+                probs = exp_logits / exp_logits.sum()
         except Exception as e:
             print(f"Inference error: {e}")
             probs = np.zeros(10)
