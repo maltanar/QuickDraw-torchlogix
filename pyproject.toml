@@ -20,7 +20,8 @@ dependencies = [
   "matplotlib>=3.7",
   "torchlogix @ git+https://github.com/ligerlac/torchlogix@main",
   "pyverilator @ git+https://github.com/maltanar/pyverilator.git",
-  "PyQt6>=6.11.0"
+  "PyQt6>=6.11.0",
+  "pyserial>=3.5
 ]
 
 [project.scripts]

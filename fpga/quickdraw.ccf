@@ -1,0 +1,17 @@
+# Pin constraints for QuickDraw inference on GateMateA1-EVB
+# Syntax: Net "<signal>" Loc = "<pin>" | <constraints>;
+#
+# GateMateA1-EVB board resources used:
+#   IO_SB_A8  – 10 MHz oscillator output (clock input)
+#   IO_SB_B7  – USER button (active-low, used as manual reset)
+#   IO_SB_B6  – USER LED
+#   IO_SA_A6  – FPGA UART RX  (connected to RP2040 USB-CDC TX)
+#   IO_SA_B6  – FPGA UART TX  (connected to RP2040 USB-CDC RX)
+
+Net "clk_i"  Loc = "IO_SB_A8" | SCHMITT_TRIGGER=true;
+Net "but_i"  Loc = "IO_SB_B7";   # USER button (active-low)
+Net "led_o"  Loc = "IO_SB_B6";   # USER LED
+
+# UART – the RP2040 bridges FPGA UART to USB-CDC (/dev/ttyACM0 on Linux)
+Net "rx_i"   Loc = "IO_SA_A6";   # FPGA RX ← RP2040 TX
+Net "tx_o"   Loc = "IO_SA_B6";   # FPGA TX → RP2040 RX

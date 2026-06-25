@@ -72,3 +72,4 @@ Dataset/MNIST
 DataUtils/class_names.txt
 Data/*.npy
 codegen/
+fpga/build

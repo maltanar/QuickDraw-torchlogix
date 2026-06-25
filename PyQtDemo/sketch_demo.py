@@ -4,16 +4,26 @@ from pathlib import Path
 import pyverilator
 from PyQt6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QFileDialog,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMainWindow,
     QMessageBox,
     QPushButton,
+    QPlainTextEdit,
+    QRadioButton,
     QVBoxLayout,
     QWidget,
 )
+
+try:
+    from fpga_uart import FPGAUARTInference
+    FPGA_AVAILABLE = True
+except ImportError:
+    FPGA_AVAILABLE = False
 from PyQt6.QtGui import QPainter, QPen, QImage
 from PyQt6.QtCore import Qt, QPoint, QTimer
 
@@ -118,20 +128,75 @@ class MainWindow(QMainWindow):
         self.btn_browse_verilog = None
         self.btn_load_verilog = None
 
+        # Inference backend state
+        self.backend = 'verilator'   # 'verilator' | 'fpga'
+        self.fpga_uart = None        # FPGAUARTInference instance (or None)
+
         # Build and load the default Verilog model using pyverilator.
         project_root = Path(__file__).resolve().parents[1]
         self.verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
         self.sim = None
-        
+
         # Central widget
         central = QWidget()
         layout = QHBoxLayout()
         central.setLayout(layout)
         self.setCentralWidget(central)
-        
+
         # Left side layout
         left_layout = QVBoxLayout()
 
+        # ------------------------------------------------------------------
+        # Backend selector group box
+        # ------------------------------------------------------------------
+        backend_group = QGroupBox("Inference Backend")
+        backend_layout = QVBoxLayout()
+        backend_group.setLayout(backend_layout)
+
+        self.radio_verilator = QRadioButton("Verilator (simulation)")
+        self.radio_fpga      = QRadioButton("FPGA via UART")
+        self.radio_verilator.setChecked(True)
+        if not FPGA_AVAILABLE:
+            self.radio_fpga.setEnabled(False)
+            self.radio_fpga.setToolTip("pyserial not installed – run: pip install pyserial")
+
+        self._backend_group = QButtonGroup()
+        self._backend_group.addButton(self.radio_verilator)
+        self._backend_group.addButton(self.radio_fpga)
+        self._backend_group.buttonClicked.connect(self.on_backend_changed)
+
+        radio_row = QHBoxLayout()
+        radio_row.addWidget(self.radio_verilator)
+        radio_row.addWidget(self.radio_fpga)
+        backend_layout.addLayout(radio_row)
+
+        # UART port row (only active when FPGA backend is selected)
+        uart_row = QHBoxLayout()
+        uart_row.addWidget(QLabel("Port:"))
+        self.uart_port_input = QLineEdit("/dev/ttyACM0")
+        self.uart_port_input.setFixedWidth(140)
+        uart_row.addWidget(self.uart_port_input)
+        self.btn_uart_connect = QPushButton("Connect")
+        self.btn_uart_connect.clicked.connect(self.on_uart_connect_toggle)
+        uart_row.addWidget(self.btn_uart_connect)
+        uart_row.addStretch()
+        backend_layout.addLayout(uart_row)
+
+        self.uart_status_label = QLabel("")
+        backend_layout.addWidget(self.uart_status_label)
+
+        self.uart_console = QPlainTextEdit()
+        self.uart_console.setReadOnly(True)
+        self.uart_console.setPlaceholderText("UART console: raw TX/RX bytes will appear here when FPGA backend is connected")
+        self.uart_console.document().setMaximumBlockCount(300)
+        backend_layout.addWidget(self.uart_console)
+
+        left_layout.addWidget(backend_group)
+        self._set_uart_controls_visible(False)
+
+        # ------------------------------------------------------------------
+        # Verilator path row
+        # ------------------------------------------------------------------
         path_row = QHBoxLayout()
         path_row.addWidget(QLabel("Verilog:"))
         self.verilog_path_input = QLineEdit(str(self.verilog_path))
@@ -168,6 +233,75 @@ class MainWindow(QMainWindow):
         
         self.init_plot()
         self.drawing_widget.clear() # trigger initial plot 
+
+    # ------------------------------------------------------------------
+    # Backend switching helpers
+    # ------------------------------------------------------------------
+
+    def _set_uart_controls_visible(self, visible: bool) -> None:
+        self.uart_port_input.setEnabled(visible)
+        self.btn_uart_connect.setEnabled(visible)
+
+    def _append_uart_console(self, line: str) -> None:
+        self.uart_console.appendPlainText(line)
+
+    def _format_uart_bytes(self, data: bytes) -> str:
+        return " ".join(f"{b:02X}" for b in data)
+
+    def on_backend_changed(self, button) -> None:
+        if button is self.radio_verilator:
+            self.backend = 'verilator'
+            self._disconnect_fpga()
+            self._set_uart_controls_visible(False)
+            self.set_verilog_controls_enabled(True)
+        else:
+            self.backend = 'fpga'
+            self.set_verilog_controls_enabled(False)
+            self._set_uart_controls_visible(True)
+        # Clear bars when switching backend
+        self.on_draw_update(self.drawing_widget.get_image_array())
+
+    def on_uart_connect_toggle(self) -> None:
+        if self.fpga_uart is not None and self.fpga_uart.is_open():
+            self._disconnect_fpga()
+        else:
+            self._connect_fpga()
+
+    def _connect_fpga(self) -> None:
+        port = self.uart_port_input.text().strip()
+        try:
+            self.fpga_uart = FPGAUARTInference(port=port)
+            self.fpga_uart.open()
+            self.uart_status_label.setText(f"Connected: {port}")
+            self.uart_status_label.setStyleSheet("color: green;")
+            self.btn_uart_connect.setText("Disconnect")
+            self.uart_port_input.setEnabled(False)
+            self._append_uart_console(f"[INFO] Connected to {port}")
+        except Exception as e:
+            self.fpga_uart = None
+            self.uart_status_label.setText(f"Failed: {e}")
+            self.uart_status_label.setStyleSheet("color: red;")
+            self._append_uart_console(f"[ERROR] Connect failed on {port}: {e}")
+            QMessageBox.critical(self, "UART Error",
+                                 f"Could not open {port}:\n{e}")
+
+    def _disconnect_fpga(self) -> None:
+        if self.fpga_uart is not None:
+            port = self.fpga_uart.port
+            self.fpga_uart.close()
+            self.fpga_uart = None
+            self._append_uart_console(f"[INFO] Disconnected from {port}")
+        self.uart_status_label.setText("")
+        self.btn_uart_connect.setText("Connect")
+        self.uart_port_input.setEnabled(self.backend == 'fpga')
+
+    def closeEvent(self, event):
+        self._disconnect_fpga()
+        super().closeEvent(event)
+
+    # ------------------------------------------------------------------
+    # Verilator helpers (unchanged logic)
+    # ------------------------------------------------------------------
 
     def load_simulator(self, verilog_path):
         verilog_path = Path(verilog_path).expanduser().resolve()
@@ -235,16 +369,29 @@ class MainWindow(QMainWindow):
         
     def on_draw_update(self, img_array):
         try:
-            if self.sim is None:
-                probs = np.zeros(10)
-            else:
-                inp_value = pack_binary_image_to_inp(img_array)
-                self.sim.io.inp = inp_value
-                logits = unpack_scores(int(self.sim.io.scores_flat))
+            inp_value = pack_binary_image_to_inp(img_array)
 
-                # Apply Softmax to get probabilities.
-                exp_logits = np.exp(logits - np.max(logits))
-                probs = exp_logits / exp_logits.sum()
+            if self.backend == 'verilator':
+                if self.sim is None:
+                    probs = np.zeros(10)
+                else:
+                    self.sim.io.inp = inp_value
+                    logits = unpack_scores(int(self.sim.io.scores_flat))
+                    exp_logits = np.exp(logits - np.max(logits))
+                    probs = exp_logits / exp_logits.sum()
+            else:  # fpga
+                if self.fpga_uart is None or not self.fpga_uart.is_open():
+                    probs = np.zeros(10)
+                else:
+                    scores_flat = self.fpga_uart.run_inference(inp_value)
+                    tx_bytes = self.fpga_uart.last_tx_bytes
+                    rx_bytes = self.fpga_uart.last_rx_bytes
+                    self._append_uart_console(f"[TX] {self._format_uart_bytes(tx_bytes)}")
+                    self._append_uart_console(f"[RX] {self._format_uart_bytes(rx_bytes)}")
+                    logits = unpack_scores(scores_flat)
+                    exp_logits = np.exp(logits - np.max(logits))
+                    probs = exp_logits / exp_logits.sum()
+
         except Exception as e:
             print(f"Inference error: {e}")
             probs = np.zeros(10)
