@@ -124,6 +124,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("EmLogic Sketch Recognition Demo")
 
         self.verilog_status_label = None
+        self.verilog_path_label = None
         self.verilog_path_input = None
         self.btn_browse_verilog = None
         self.btn_load_verilog = None
@@ -198,7 +199,8 @@ class MainWindow(QMainWindow):
         # Verilator path row
         # ------------------------------------------------------------------
         path_row = QHBoxLayout()
-        path_row.addWidget(QLabel("Verilog:"))
+        self.verilog_path_label = QLabel("Verilog:")
+        path_row.addWidget(self.verilog_path_label)
         self.verilog_path_input = QLineEdit(str(self.verilog_path))
         self.verilog_path_input.returnPressed.connect(self.on_apply_verilog_path)
         path_row.addWidget(self.verilog_path_input)
@@ -232,6 +234,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.canvas)
         
         self.init_plot()
+        self._set_backend_visibility()
         self.drawing_widget.clear() # trigger initial plot 
 
     # ------------------------------------------------------------------
@@ -241,6 +244,25 @@ class MainWindow(QMainWindow):
     def _set_uart_controls_visible(self, visible: bool) -> None:
         self.uart_port_input.setEnabled(visible)
         self.btn_uart_connect.setEnabled(visible)
+
+    def _set_backend_visibility(self) -> None:
+        is_verilator = self.backend == 'verilator'
+
+        # Verilator-specific widgets
+        if self.verilog_path_label is not None:
+            self.verilog_path_label.setVisible(is_verilator)
+        if self.verilog_path_input is not None:
+            self.verilog_path_input.setVisible(is_verilator)
+        if self.btn_browse_verilog is not None:
+            self.btn_browse_verilog.setVisible(is_verilator)
+        if self.btn_load_verilog is not None:
+            self.btn_load_verilog.setVisible(is_verilator)
+        if self.verilog_status_label is not None:
+            self.verilog_status_label.setVisible(is_verilator)
+
+        # FPGA-specific console
+        if self.uart_console is not None:
+            self.uart_console.setVisible(not is_verilator)
 
     def _append_uart_console(self, line: str) -> None:
         self.uart_console.appendPlainText(line)
@@ -258,6 +280,7 @@ class MainWindow(QMainWindow):
             self.backend = 'fpga'
             self.set_verilog_controls_enabled(False)
             self._set_uart_controls_visible(True)
+        self._set_backend_visibility()
         # Clear bars when switching backend
         self.on_draw_update(self.drawing_widget.get_image_array())
 
