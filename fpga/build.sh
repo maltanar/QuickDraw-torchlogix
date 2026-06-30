@@ -14,10 +14,10 @@
 #   ./build.sh clean        – remove build artefacts
 #
 # Environment overrides (export before calling, or prefix on command line):
-#   FREQ_MHZ=1              target clock frequency for P&R timing (MHz)
-#   BAUD_RATE=115200        UART baud rate baked into the design
-#   CLK_FREQ=10000000       FPGA clock frequency (Hz, must match oscillator)
-#   BOARD=gatemate_evb_jtag openFPGALoader board name
+#   FREQ_MHZ=1               target clock frequency for P&R timing (MHz)
+#   BAUD_RATE=115200         UART baud rate baked into the design
+#   CLK_FREQ=10000000        FPGA clock frequency (Hz, must match oscillator)
+#   BOARD=olimex_gatemateevb openFPGALoader board name
 
 set -euo pipefail
 
@@ -27,7 +27,7 @@ set -euo pipefail
 FREQ_MHZ=${FREQ_MHZ:-1}           # P&R timing target (MHz) – conservative
 BAUD_RATE=${BAUD_RATE:-115200}     # UART baud rate
 CLK_FREQ=${CLK_FREQ:-10000000}     # Board oscillator (10 MHz on GateMateA1-EVB)
-BOARD=${BOARD:-gatemate_evb_jtag}  # openFPGALoader -b argument
+BOARD=${BOARD:-olimex_gatemateevb}  # openFPGALoader -b argument
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -161,7 +161,7 @@ case "${1:-build}" in
         echo "  FREQ_MHZ=<n>      P&R timing target in MHz   (default: 1)"
         echo "  BAUD_RATE=<n>     UART baud rate             (default: 115200)"
         echo "  CLK_FREQ=<n>      Board oscillator in Hz     (default: 10000000)"
-        echo "  BOARD=<name>      openFPGALoader board name  (default: gatemate_evb_jtag)"
+        echo "  BOARD=<name>      openFPGALoader board name  (default: olimex_gatemateevb)"
         exit 1
         ;;
 esac
