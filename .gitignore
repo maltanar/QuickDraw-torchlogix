@@ -73,3 +73,9 @@ DataUtils/class_names.txt
 Data/*.npy
 codegen/
 fpga/build
+
+# Local PipelineC/tool-generated artifacts
+third_party/PipelineC/
+pipelinec_output_*/
+lextab.py
+yacctab.py

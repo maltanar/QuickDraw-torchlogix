@@ -120,16 +120,34 @@ def build_parser():
         help="Export trained logic model to Verilog after training.",
     )
     parser.add_argument(
+        "--export_c",
+        action="store_true",
+        default=False,
+        help="Export trained logic model to C after training.",
+    )
+    parser.add_argument(
         "--verilog_path",
         type=str,
         default="./Checkpoints/model_logic.v",
         help="Output path for Verilog when --export_verilog is set.",
     )
     parser.add_argument(
+        "--c_path",
+        type=str,
+        default="./Checkpoints/model_logic.c",
+        help="Output path for C when --export_c is set.",
+    )
+    parser.add_argument(
         "--verilog_from_best",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Export Verilog from best validation checkpoint if available.",
+    )
+    parser.add_argument(
+        "--c_from_best",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Export C from best validation checkpoint if available.",
     )
     parser.add_argument(
         "--verilog_inline_single_use",
@@ -222,6 +240,60 @@ def _export_model_verilog(model, image_size, verilog_path, inline_single_use=Fal
         f.write(verilog_code)
 
     return verilog_path
+
+
+def _export_model_c(model, image_size, c_path, simplify=True):
+    try:
+        import importlib
+
+        torchlogix_mod = importlib.import_module("torchlogix")
+        circuit_cls = getattr(torchlogix_mod, "Circuit", None)
+
+        set_export_mode = None
+        try:
+            torchlogix_utils = importlib.import_module("torchlogix.utils")
+            set_export_mode = getattr(torchlogix_utils, "set_export_mode", None)
+        except ImportError:
+            pass
+
+        if circuit_cls is None:
+            raise ImportError(
+                "No 'Circuit' export API found in installed torchlogix package."
+            )
+    except ImportError as exc:
+        raise ImportError(
+            "C export requires a torchlogix build exposing 'Circuit' and C code export APIs. "
+            "Install/upgrade to a torchlogix version with circuit export support, "
+            "or run without --export_c."
+        ) from exc
+
+    model = model.cpu().eval()
+    if set_export_mode is not None:
+        set_export_mode(model)
+
+    circuit = circuit_cls.from_model(model, input_shape=(1, int(image_size), int(image_size)))
+    if simplify:
+        circuit.simplify()
+
+    get_c_code = getattr(circuit, "get_c_code", None)
+    if get_c_code is None:
+        raise ImportError(
+            "Installed torchlogix Circuit does not expose get_c_code()."
+        )
+
+    try:
+        c_code = get_c_code()
+    except TypeError:
+        # Some torchlogix versions may require keyword arguments.
+        c_code = get_c_code(inline_single_use=False)
+
+    c_dir = os.path.dirname(c_path)
+    if c_dir:
+        os.makedirs(c_dir, exist_ok=True)
+    with open(c_path, "w", encoding="utf-8") as f:
+        f.write(c_code)
+
+    return c_path
 
 
 def _epoch_pass(model, loader, image_size, device, optimizer=None, desc="Eval", force_train=False, is_mnist=False):
@@ -501,10 +573,30 @@ def run_training(args):
                 state["verilog_export_error"] = str(exc)
                 print(f"Skipping Verilog export: {exc}")
 
+        if args.export_c:
+            export_model = copy.deepcopy(_unwrap_model(model))
+            if args.c_from_best:
+                export_model.load_state_dict(best_state)
+
+            try:
+                c_path = _export_model_c(
+                    model=export_model,
+                    image_size=args.image_size,
+                    c_path=args.c_path,
+                    simplify=not args.no_verilog_simplify,
+                )
+                state["c_path"] = c_path
+                print(f"Exported C: {c_path}")
+            except ImportError as exc:
+                # Keep training successful even when optional export support is unavailable.
+                state["c_export_error"] = str(exc)
+                print(f"Skipping C export: {exc}")
+
     return {
         "best_accuracy": float(best_accuracy),
         "checkpoint": os.path.join(args.save_dir, args.save_name),
         "verilog_path": args.verilog_path if args.export_verilog else "",
+        "c_path": args.c_path if args.export_c else "",
         "conv_channels": args.conv_channels,
         "dense_dims": args.dense_dims,
         "tree_depth": args.tree_depth,

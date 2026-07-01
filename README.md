@@ -65,25 +65,37 @@ bash codegen.sh model_w4a8_qop
 6. Run TorchLogix logic-NN training examples:
 
 ```bash
-quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10
+quickdraw-logic-train --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10
 ```
 
 Generate Verilog after training (exports best validation checkpoint by default):
 
 ```bash
-quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --verilog_path Checkpoints/model_logic.v
+quickdraw-logic-train --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --verilog_path Checkpoints/model_logic.v
 ```
 
 Generate Verilog from the final model state instead of best validation checkpoint:
 
 ```bash
-quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --no-verilog_from_best --verilog_path Checkpoints/model_logic_final.v
+quickdraw-logic-train --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_verilog --no-verilog_from_best --verilog_path Checkpoints/model_logic_final.v
 ```
 
 Resume from a saved checkpoint and then export Verilog:
 
 ```bash
-quickdraw-logic-train --dataset mnist --load_checkpoint Checkpoints/model_logic.pytorch --ngpu 0 -e 5 --export_verilog --verilog_path Checkpoints/model_logic_resumed.v
+quickdraw-logic-train --load_checkpoint Checkpoints/model_logic.pytorch --ngpu 0 -e 5 --export_verilog --verilog_path Checkpoints/model_logic_resumed.v
+```
+
+Export TorchLogix C directly from the trained circuit IR (best validation checkpoint by default):
+
+```bash
+quickdraw-logic-train --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_c --c_path Checkpoints/model_logic.c
+```
+
+Export C from the final epoch model state instead of best validation checkpoint:
+
+```bash
+quickdraw-logic-train --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10 --export_c --no-c_from_best --c_path Checkpoints/model_logic_final.c
 ```
 
 Instantiate a dense-only logic topology by passing an empty conv stage list and keeping the dense widths large enough for torchlogix connection coverage:
@@ -105,6 +117,35 @@ quickdraw-logic-sweep --ngpu 0 --epochs 5 --conv_channels_grid "16|16,48|16,48,1
 ```
 
 The sweep writes per-trial logs and a global summary in `logic_sweep_logs/logic_sweep_summary.json`.
+
+## PipelineC Flow (TorchLogix C -> HDL)
+
+The repository now includes helper scripts to test a PipelineC-based flow from TorchLogix-generated C:
+
+1. Setup PipelineC locally:
+
+```bash
+bash setup_pipelinec.sh
+export PATH="$PWD/third_party/PipelineC/src:$PATH"
+```
+
+2. Generate C from TorchLogix:
+
+```bash
+quickdraw-logic-train  --ngpu 0 -e 10 --export_c --c_path Checkpoints/model_logic.c
+```
+
+3. Run PipelineC on the generated C:
+
+```bash
+bash pipelinec_from_torchlogix.sh Checkpoints/model_logic.c --comb
+```
+
+Notes:
+
+1. PipelineC expects PipelineC-compatible C style and top-level pragmas for most full flows. Start with `--comb` to validate parser/IR acceptance first.
+2. `pipelinec_from_torchlogix.sh` automatically converts TorchLogix C to PipelineC-friendlier types and writes a generated wrapper with a `MAIN` pragma.
+3. Existing ONNX-based `codegen.sh` remains available; this new path is an additional TorchLogix-native export route.
 
 ## Existing Script Workflow
 
