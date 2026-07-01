@@ -5,6 +5,7 @@ import pyverilator
 from PyQt6.QtWidgets import (
     QApplication,
     QButtonGroup,
+    QCheckBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -224,6 +225,11 @@ class MainWindow(QMainWindow):
         self.btn_clear = QPushButton("Clear Canvas")
         self.btn_clear.clicked.connect(self.drawing_widget.clear)
         left_layout.addWidget(self.btn_clear)
+
+        self.chk_softmax = QCheckBox("Apply Softmax")
+        self.chk_softmax.setChecked(True)
+        self.chk_softmax.stateChanged.connect(self.on_softmax_toggled)
+        left_layout.addWidget(self.chk_softmax)
         left_layout.addStretch()
         
         layout.addLayout(left_layout)
@@ -380,6 +386,9 @@ class MainWindow(QMainWindow):
         finally:
             self.set_verilog_controls_enabled(True)
 
+    def on_softmax_toggled(self):
+        self.on_draw_update(self.drawing_widget.get_image_array())
+
     def init_plot(self):
         self.ax.clear()
         self.bars = self.ax.barh(CLASSES, np.zeros(10), color='skyblue')
@@ -391,20 +400,19 @@ class MainWindow(QMainWindow):
         self.canvas.draw()
         
     def on_draw_update(self, img_array):
+        use_softmax = self.chk_softmax.isChecked()
         try:
             inp_value = pack_binary_image_to_inp(img_array)
 
             if self.backend == 'verilator':
                 if self.sim is None:
-                    probs = np.zeros(10)
+                    logits = np.zeros(10)
                 else:
                     self.sim.io.inp = inp_value
                     logits = unpack_scores(int(self.sim.io.scores_flat))
-                    exp_logits = np.exp(logits - np.max(logits))
-                    probs = exp_logits / exp_logits.sum()
             else:  # fpga
                 if self.fpga_uart is None or not self.fpga_uart.is_open():
-                    probs = np.zeros(10)
+                    logits = np.zeros(10)
                 else:
                     scores_flat = self.fpga_uart.run_inference(inp_value)
                     tx_bytes = self.fpga_uart.last_tx_bytes
@@ -412,16 +420,28 @@ class MainWindow(QMainWindow):
                     self._append_uart_console(f"[TX] {self._format_uart_bytes(tx_bytes)}")
                     self._append_uart_console(f"[RX] {self._format_uart_bytes(rx_bytes)}")
                     logits = unpack_scores(scores_flat)
-                    exp_logits = np.exp(logits - np.max(logits))
-                    probs = exp_logits / exp_logits.sum()
+
+            if use_softmax:
+                exp_logits = np.exp(logits - np.max(logits))
+                values = exp_logits / exp_logits.sum()
+            else:
+                values = logits
 
         except Exception as e:
             print(f"Inference error: {e}")
-            probs = np.zeros(10)
-            
+            values = np.zeros(10)
+
+        # Update axis limits based on softmax setting
+        if use_softmax:
+            self.ax.set_xlim(0, 1)
+            self.ax.set_xlabel('Probability')
+        else:
+            self.ax.set_xlim(0, 200)
+            self.ax.set_xlabel('Score')
+
         # Update plot bars
-        for bar, prob in zip(self.bars, probs):
-            bar.set_width(prob)
+        for bar, val in zip(self.bars, values):
+            bar.set_width(val)
         self.canvas.draw()
 
 if __name__ == "__main__":
