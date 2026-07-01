@@ -31,6 +31,8 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+PIPELINE_LATENCY_CYCLES = 2
+VERILATOR_EXTRA_ARGS = ["--CFLAGS", "-fPIC --std=c++17"]
 
 
 def to_signed32(value):
@@ -326,9 +328,38 @@ class MainWindow(QMainWindow):
     # Verilator helpers (unchanged logic)
     # ------------------------------------------------------------------
 
+    def _sim_has_signal(self, name: str) -> bool:
+        if self.sim is None:
+            return False
+        try:
+            getattr(self.sim.io, name)
+            return True
+        except AttributeError:
+            return False
+
+    def _sim_tick_cycle(self) -> None:
+        # Drive a full clock cycle (posedge + negedge).
+        self.sim.io.clk = 0
+        self.sim.io.clk = 1
+        self.sim.io.clk = 0
+
+    def _sim_reset(self) -> None:
+        if self.sim is None:
+            return
+        if self._sim_has_signal("clk") and self._sim_has_signal("reset"):
+            self.sim.io.reset = 1
+            self._sim_tick_cycle()
+            self.sim.io.reset = 0
+            self._sim_tick_cycle()
+
     def load_simulator(self, verilog_path):
         verilog_path = Path(verilog_path).expanduser().resolve()
-        self.sim = pyverilator.PyVerilator.build(str(verilog_path), top_module_name="circuit")
+        self.sim = pyverilator.PyVerilator.build(
+            str(verilog_path),
+            top_module_name="circuit",
+            extra_args=VERILATOR_EXTRA_ARGS,
+        )
+        self._sim_reset()
         self.verilog_path = verilog_path
 
     def set_verilog_status(self, text, color):
@@ -399,6 +430,9 @@ class MainWindow(QMainWindow):
                     probs = np.zeros(10)
                 else:
                     self.sim.io.inp = inp_value
+                    if self._sim_has_signal("clk") and self._sim_has_signal("reset"):
+                        for _ in range(PIPELINE_LATENCY_CYCLES):
+                            self._sim_tick_cycle()
                     logits = unpack_scores(int(self.sim.io.scores_flat))
                     exp_logits = np.exp(logits - np.max(logits))
                     probs = exp_logits / exp_logits.sum()

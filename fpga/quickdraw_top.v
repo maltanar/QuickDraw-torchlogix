@@ -4,8 +4,8 @@
 //   PC → FPGA : 98 bytes  (784 bits of binarized 28×28 image, LSB first)
 //   FPGA → PC : 40 bytes  (320 bits = 10 × 32-bit signed scores, LSB first)
 //
-// The 'circuit' module is purely combinational; scores update within one
-// clock cycle after all 98 input bytes have been latched.
+// The 'circuit' module is clocked/pipelined; scores are available after
+// a 2-cycle latency from the last latched input byte.
 //
 // LED:  off during RECV, on during SEND (visual activity indicator)
 // BTN:  active-low manual reset (hold to reset state machine)
@@ -51,12 +51,14 @@ module quickdraw_top #(
     );
 
     // -----------------------------------------------------------------------
-    // Inference circuit (combinational – auto-generated)
+    // Inference circuit (clocked/pipelined - auto-generated)
     // -----------------------------------------------------------------------
     reg  [783:0] inp_reg;
     wire [319:0] scores_flat;
 
     circuit u_circuit (
+        .clk        (clk_i),
+        .reset      (~rst_n),
         .inp        (inp_reg),
         .scores_flat(scores_flat)
     );
@@ -64,11 +66,13 @@ module quickdraw_top #(
     // -----------------------------------------------------------------------
     // Control state machine
     // -----------------------------------------------------------------------
-    localparam S_RECV = 1'b0;   // receiving 98 bytes from PC
-    localparam S_SEND = 1'b1;   // sending  40 bytes to PC
+    localparam [1:0] S_RECV = 2'd0;   // receiving 98 bytes from PC
+    localparam [1:0] S_WAIT = 2'd1;   // wait for circuit pipeline latency
+    localparam [1:0] S_SEND = 2'd2;   // sending  40 bytes to PC
 
-    reg       state;
+    reg [1:0] state;
     reg [6:0] byte_cnt;   // 0..97 in RECV, 0..39 in SEND
+    reg [1:0] wait_cnt;   // cycles remaining before SEND (uses value 2)
 
     // TX wiring: combinational write-strobe keeps handshake glitch-free
     wire       tx_busy;
@@ -79,6 +83,7 @@ module quickdraw_top #(
         if (!rst_n) begin
             state    <= S_RECV;
             byte_cnt <= 7'd0;
+            wait_cnt <= 2'd0;
             inp_reg  <= 784'd0;
             led_o    <= 1'b0;
         end else begin
@@ -89,12 +94,21 @@ module quickdraw_top #(
                     if (rx_valid) begin
                         inp_reg[byte_cnt * 8 +: 8] <= rx_data;
                         if (byte_cnt == 7'd97) begin
-                            // All 98 bytes received → run inference → send scores
-                            state    <= S_SEND;
+                            // All 98 bytes received -> wait 2 cycles for pipeline
+                            state    <= S_WAIT;
+                            wait_cnt <= 2'd2;
                             byte_cnt <= 7'd0;
                         end else
                             byte_cnt <= byte_cnt + 7'd1;
                     end
+                end
+
+                S_WAIT: begin
+                    led_o <= 1'b0;
+                    if (wait_cnt == 2'd1) begin
+                        state <= S_SEND;
+                    end
+                    wait_cnt <= wait_cnt - 2'd1;
                 end
 
                 S_SEND: begin
@@ -109,6 +123,13 @@ module quickdraw_top #(
                         end else
                             byte_cnt <= byte_cnt + 7'd1;
                     end
+                end
+
+                default: begin
+                    state    <= S_RECV;
+                    byte_cnt <= 7'd0;
+                    wait_cnt <= 2'd0;
+                    led_o    <= 1'b0;
                 end
 
             endcase

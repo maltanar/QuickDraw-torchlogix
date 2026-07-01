@@ -5,6 +5,8 @@
 
 // 10 output(s) - scores_flat = 10 x 32-bit values
 module circuit (
+    input  wire         clk,
+    input  wire         reset,
     input  wire [783:0] inp,
     output reg  [319:0] scores_flat
 );
@@ -7015,39 +7017,103 @@ module circuit (
     assign raw[3950] = g2024;
     assign raw[3951] = g4453;
 
-    // --- outputs (behavioral - synthesizer maps to carry chain) ---
-    integer s_0, s_1, s_2, s_3, s_4, s_5, s_6, s_7, s_8, s_9, i;
+    // --- outputs: 2-cycle pipelined adder tree ---
+    integer i;
+    reg [31:0] s0_l, s0_h, s1_l, s1_h, s2_l, s2_h, s3_l, s3_h, s4_l, s4_h;
+    reg [31:0] s5_l, s5_h, s6_l, s6_h, s7_l, s7_h, s8_l, s8_h, s9_l, s9_h;
+    reg [31:0] s0_l_q, s0_h_q, s1_l_q, s1_h_q, s2_l_q, s2_h_q, s3_l_q, s3_h_q, s4_l_q, s4_h_q;
+    reg [31:0] s5_l_q, s5_h_q, s6_l_q, s6_h_q, s7_l_q, s7_h_q, s8_l_q, s8_h_q, s9_l_q, s9_h_q;
+
     always @(*) begin
-        s_0 = 0;
-        for (i = 0; i < 397; i = i + 1) s_0 = s_0 + raw[i];
-        scores_flat[0*32 +: 32] = s_0;
-        s_1 = 0;
-        for (i = 397; i < 784; i = i + 1) s_1 = s_1 + raw[i];
-        scores_flat[1*32 +: 32] = s_1;
-        s_2 = 0;
-        for (i = 784; i < 1180; i = i + 1) s_2 = s_2 + raw[i];
-        scores_flat[2*32 +: 32] = s_2;
-        s_3 = 0;
-        for (i = 1180; i < 1575; i = i + 1) s_3 = s_3 + raw[i];
-        scores_flat[3*32 +: 32] = s_3;
-        s_4 = 0;
-        for (i = 1575; i < 1971; i = i + 1) s_4 = s_4 + raw[i];
-        scores_flat[4*32 +: 32] = s_4;
-        s_5 = 0;
-        for (i = 1971; i < 2358; i = i + 1) s_5 = s_5 + raw[i];
-        scores_flat[5*32 +: 32] = s_5;
-        s_6 = 0;
-        for (i = 2358; i < 2752; i = i + 1) s_6 = s_6 + raw[i];
-        scores_flat[6*32 +: 32] = s_6;
-        s_7 = 0;
-        for (i = 2752; i < 3152; i = i + 1) s_7 = s_7 + raw[i];
-        scores_flat[7*32 +: 32] = s_7;
-        s_8 = 0;
-        for (i = 3152; i < 3552; i = i + 1) s_8 = s_8 + raw[i];
-        scores_flat[8*32 +: 32] = s_8;
-        s_9 = 0;
-        for (i = 3552; i < 3952; i = i + 1) s_9 = s_9 + raw[i];
-        scores_flat[9*32 +: 32] = s_9;
+        s0_l = 0;
+        for (i = 0; i < 199; i = i + 1) s0_l = s0_l + {31'b0, raw[i]};
+        s0_h = 0;
+        for (i = 199; i < 397; i = i + 1) s0_h = s0_h + {31'b0, raw[i]};
+
+        s1_l = 0;
+        for (i = 397; i < 591; i = i + 1) s1_l = s1_l + {31'b0, raw[i]};
+        s1_h = 0;
+        for (i = 591; i < 784; i = i + 1) s1_h = s1_h + {31'b0, raw[i]};
+
+        s2_l = 0;
+        for (i = 784; i < 982; i = i + 1) s2_l = s2_l + {31'b0, raw[i]};
+        s2_h = 0;
+        for (i = 982; i < 1180; i = i + 1) s2_h = s2_h + {31'b0, raw[i]};
+
+        s3_l = 0;
+        for (i = 1180; i < 1378; i = i + 1) s3_l = s3_l + {31'b0, raw[i]};
+        s3_h = 0;
+        for (i = 1378; i < 1575; i = i + 1) s3_h = s3_h + {31'b0, raw[i]};
+
+        s4_l = 0;
+        for (i = 1575; i < 1773; i = i + 1) s4_l = s4_l + {31'b0, raw[i]};
+        s4_h = 0;
+        for (i = 1773; i < 1971; i = i + 1) s4_h = s4_h + {31'b0, raw[i]};
+
+        s5_l = 0;
+        for (i = 1971; i < 2165; i = i + 1) s5_l = s5_l + {31'b0, raw[i]};
+        s5_h = 0;
+        for (i = 2165; i < 2358; i = i + 1) s5_h = s5_h + {31'b0, raw[i]};
+
+        s6_l = 0;
+        for (i = 2358; i < 2555; i = i + 1) s6_l = s6_l + {31'b0, raw[i]};
+        s6_h = 0;
+        for (i = 2555; i < 2752; i = i + 1) s6_h = s6_h + {31'b0, raw[i]};
+
+        s7_l = 0;
+        for (i = 2752; i < 2952; i = i + 1) s7_l = s7_l + {31'b0, raw[i]};
+        s7_h = 0;
+        for (i = 2952; i < 3152; i = i + 1) s7_h = s7_h + {31'b0, raw[i]};
+
+        s8_l = 0;
+        for (i = 3152; i < 3352; i = i + 1) s8_l = s8_l + {31'b0, raw[i]};
+        s8_h = 0;
+        for (i = 3352; i < 3552; i = i + 1) s8_h = s8_h + {31'b0, raw[i]};
+
+        s9_l = 0;
+        for (i = 3552; i < 3752; i = i + 1) s9_l = s9_l + {31'b0, raw[i]};
+        s9_h = 0;
+        for (i = 3752; i < 3952; i = i + 1) s9_h = s9_h + {31'b0, raw[i]};
+    end
+
+    always @(posedge clk or posedge reset) begin
+        if (reset) begin
+            s0_l_q <= 0; s0_h_q <= 0;
+            s1_l_q <= 0; s1_h_q <= 0;
+            s2_l_q <= 0; s2_h_q <= 0;
+            s3_l_q <= 0; s3_h_q <= 0;
+            s4_l_q <= 0; s4_h_q <= 0;
+            s5_l_q <= 0; s5_h_q <= 0;
+            s6_l_q <= 0; s6_h_q <= 0;
+            s7_l_q <= 0; s7_h_q <= 0;
+            s8_l_q <= 0; s8_h_q <= 0;
+            s9_l_q <= 0; s9_h_q <= 0;
+            scores_flat <= 0;
+        end else begin
+            // Stage 1: register partial sums
+            s0_l_q <= s0_l; s0_h_q <= s0_h;
+            s1_l_q <= s1_l; s1_h_q <= s1_h;
+            s2_l_q <= s2_l; s2_h_q <= s2_h;
+            s3_l_q <= s3_l; s3_h_q <= s3_h;
+            s4_l_q <= s4_l; s4_h_q <= s4_h;
+            s5_l_q <= s5_l; s5_h_q <= s5_h;
+            s6_l_q <= s6_l; s6_h_q <= s6_h;
+            s7_l_q <= s7_l; s7_h_q <= s7_h;
+            s8_l_q <= s8_l; s8_h_q <= s8_h;
+            s9_l_q <= s9_l; s9_h_q <= s9_h;
+
+            // Stage 2: register final output sums
+            scores_flat[0*32 +: 32] <= s0_l_q + s0_h_q;
+            scores_flat[1*32 +: 32] <= s1_l_q + s1_h_q;
+            scores_flat[2*32 +: 32] <= s2_l_q + s2_h_q;
+            scores_flat[3*32 +: 32] <= s3_l_q + s3_h_q;
+            scores_flat[4*32 +: 32] <= s4_l_q + s4_h_q;
+            scores_flat[5*32 +: 32] <= s5_l_q + s5_h_q;
+            scores_flat[6*32 +: 32] <= s6_l_q + s6_h_q;
+            scores_flat[7*32 +: 32] <= s7_l_q + s7_h_q;
+            scores_flat[8*32 +: 32] <= s8_l_q + s8_h_q;
+            scores_flat[9*32 +: 32] <= s9_l_q + s9_h_q;
+        end
     end
 
 endmodule
