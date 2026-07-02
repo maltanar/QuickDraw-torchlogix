@@ -26,7 +26,7 @@ try:
 except ImportError:
     FPGA_AVAILABLE = False
 from PyQt6.QtGui import QPainter, QPen, QImage
-from PyQt6.QtCore import Qt, QPoint, QTimer
+from PyQt6.QtCore import Qt, QPoint, QTimer, QObject, QThread, pyqtSignal
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -56,6 +56,53 @@ def unpack_scores(scores_flat):
         raw = (scores_flat >> (32 * i)) & 0xFFFFFFFF
         scores.append(to_signed32(raw))
     return np.array(scores, dtype=np.float32)
+
+
+class VerilatorLoadWorker(QObject):
+    finished = pyqtSignal(object, str, str)
+    failed = pyqtSignal(str)
+
+    def __init__(self, *, use_prebuilt_so: bool, so_path: str | None, verilog_path: str | None,
+                 build_dir: str | None, top_module_name: str):
+        super().__init__()
+        self.use_prebuilt_so = use_prebuilt_so
+        self.so_path = so_path
+        self.verilog_path = verilog_path
+        self.build_dir = build_dir
+        self.top_module_name = top_module_name
+
+    def run(self):
+        try:
+            if self.use_prebuilt_so:
+                resolved_so_path = Path(self.so_path).expanduser().resolve()
+                sim = pyverilator.PyVerilator(str(resolved_so_path), auto_eval=True)
+                self.finished.emit(sim, str(resolved_so_path), "prebuilt")
+                return
+
+            resolved_verilog_path = Path(self.verilog_path).expanduser().resolve()
+            resolved_build_dir = Path(self.build_dir).expanduser().resolve()
+            resolved_build_dir.mkdir(parents=True, exist_ok=True)
+            cached_lib = resolved_build_dir / f"V{self.top_module_name}"
+
+            should_rebuild = True
+            if cached_lib.exists():
+                try:
+                    should_rebuild = cached_lib.stat().st_mtime < resolved_verilog_path.stat().st_mtime
+                except OSError:
+                    should_rebuild = True
+
+            if should_rebuild:
+                sim = pyverilator.PyVerilator.build(
+                    str(resolved_verilog_path),
+                    top_module_name=self.top_module_name,
+                    build_dir=str(resolved_build_dir),
+                )
+                self.finished.emit(sim, str(resolved_verilog_path), "compiled")
+            else:
+                sim = pyverilator.PyVerilator(str(cached_lib), auto_eval=True)
+                self.finished.emit(sim, str(resolved_verilog_path), "cached")
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 class DrawingWidget(QWidget):
     def __init__(self, update_callback):
@@ -129,6 +176,15 @@ class MainWindow(QMainWindow):
         self.verilog_path_input = None
         self.btn_browse_verilog = None
         self.btn_load_verilog = None
+        self.chk_use_prebuilt_so = None
+        self.prebuilt_so_path_label = None
+        self.prebuilt_so_path_input = None
+        self.btn_browse_prebuilt_so = None
+        self.verilator_load_thread = None
+        self.verilator_load_worker = None
+        self._previous_sim_before_load = None
+        self._previous_path_before_load = None
+        self._pending_prebuilt_mode = False
 
         # Inference backend state
         self.backend = 'verilator'   # 'verilator' | 'fpga'
@@ -137,6 +193,8 @@ class MainWindow(QMainWindow):
         # Build and load the default Verilog model using pyverilator.
         project_root = Path(__file__).resolve().parents[1]
         self.verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
+        self.verilated_cache_root = project_root / "verilated"
+        self.top_module_name = "circuit"
         self.sim = None
 
         # Central widget
@@ -215,6 +273,24 @@ class MainWindow(QMainWindow):
         path_row.addWidget(self.btn_load_verilog)
         left_layout.addLayout(path_row)
 
+        so_mode_row = QHBoxLayout()
+        self.chk_use_prebuilt_so = QCheckBox("Use prebuilt sim object")
+        self.chk_use_prebuilt_so.stateChanged.connect(self.on_verilator_source_mode_changed)
+        so_mode_row.addWidget(self.chk_use_prebuilt_so)
+        so_mode_row.addStretch()
+        left_layout.addLayout(so_mode_row)
+
+        so_path_row = QHBoxLayout()
+        self.prebuilt_so_path_label = QLabel("Shared lib:")
+        so_path_row.addWidget(self.prebuilt_so_path_label)
+        self.prebuilt_so_path_input = QLineEdit("")
+        self.prebuilt_so_path_input.returnPressed.connect(self.on_apply_verilog_path)
+        so_path_row.addWidget(self.prebuilt_so_path_input)
+        self.btn_browse_prebuilt_so = QPushButton("Browse")
+        self.btn_browse_prebuilt_so.clicked.connect(self.on_browse_prebuilt_so)
+        so_path_row.addWidget(self.btn_browse_prebuilt_so)
+        left_layout.addLayout(so_path_row)
+
         self.verilog_status_label = QLabel()
         left_layout.addWidget(self.verilog_status_label)
         self.set_verilog_status("Not loaded (press Load)", "gray")
@@ -240,6 +316,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.canvas)
         
         self.init_plot()
+        self.on_verilator_source_mode_changed()
         self._set_backend_visibility()
         self.drawing_widget.clear() # trigger initial plot 
 
@@ -265,6 +342,14 @@ class MainWindow(QMainWindow):
             self.btn_load_verilog.setVisible(is_verilator)
         if self.verilog_status_label is not None:
             self.verilog_status_label.setVisible(is_verilator)
+        if self.chk_use_prebuilt_so is not None:
+            self.chk_use_prebuilt_so.setVisible(is_verilator)
+        if self.prebuilt_so_path_label is not None:
+            self.prebuilt_so_path_label.setVisible(is_verilator)
+        if self.prebuilt_so_path_input is not None:
+            self.prebuilt_so_path_input.setVisible(is_verilator)
+        if self.btn_browse_prebuilt_so is not None:
+            self.btn_browse_prebuilt_so.setVisible(is_verilator)
 
         # FPGA-specific console
         if self.uart_console is not None:
@@ -325,6 +410,10 @@ class MainWindow(QMainWindow):
         self.uart_port_input.setEnabled(self.backend == 'fpga')
 
     def closeEvent(self, event):
+        if self.verilator_load_thread is not None and self.verilator_load_thread.isRunning():
+            QMessageBox.information(self, "Please Wait", "Verilator is still building/loading. Try closing again after it finishes.")
+            event.ignore()
+            return
         self._disconnect_fpga()
         super().closeEvent(event)
 
@@ -332,9 +421,97 @@ class MainWindow(QMainWindow):
     # Verilator helpers (unchanged logic)
     # ------------------------------------------------------------------
 
-    def load_simulator(self, verilog_path):
+    def _cache_build_dir_for_verilog(self, verilog_path: Path) -> Path:
+        cache_name = f"{verilog_path.stem}_{self.top_module_name}"
+        return self.verilated_cache_root / cache_name
+
+    def _expected_cached_lib_path(self, build_dir: Path) -> Path:
+        # PyVerilator builds a loadable shared object named like V<top_module>.
+        return build_dir / f"V{self.top_module_name}"
+
+    def _cleanup_verilator_load_thread(self) -> None:
+        if self.verilator_load_worker is not None:
+            self.verilator_load_worker.deleteLater()
+            self.verilator_load_worker = None
+        if self.verilator_load_thread is not None:
+            self.verilator_load_thread.quit()
+            self.verilator_load_thread.wait()
+            self.verilator_load_thread.deleteLater()
+            self.verilator_load_thread = None
+
+    def _on_async_verilator_load_finished(self, sim, loaded_ref: str, load_mode: str) -> None:
+        self.sim = sim
+        if load_mode in ("compiled", "cached"):
+            self.verilog_path = Path(loaded_ref)
+
+        if load_mode == "compiled":
+            print(f"Loaded Verilog model (fresh compile): {loaded_ref}")
+            self.set_verilog_status("Done (compiled)", "green")
+        elif load_mode == "cached":
+            print(f"Loaded Verilog model (cache hit): {loaded_ref}")
+            self.set_verilog_status("Done (cache hit)", "green")
+        else:
+            print(f"Loaded prebuilt shared library: {loaded_ref}")
+            self.set_verilog_status("Done (prebuilt)", "green")
+
+        self.set_verilog_controls_enabled(True)
+        self.on_verilator_source_mode_changed()
+        self._cleanup_verilator_load_thread()
+
+    def _on_async_verilator_load_failed(self, error_text: str) -> None:
+        self.sim = self._previous_sim_before_load
+        self.verilog_path = self._previous_path_before_load
+        if self.verilog_path_input is not None and self._previous_path_before_load is not None:
+            self.verilog_path_input.setText(str(self._previous_path_before_load))
+
+        self.set_verilog_status("Compile/load failed", "red")
+        if self._pending_prebuilt_mode:
+            QMessageBox.critical(self, "Load Error", f"Failed to load shared library:\n{error_text}")
+        else:
+            QMessageBox.critical(self, "Load Error", f"Failed to load Verilog model:\n{error_text}")
+
+        self.set_verilog_controls_enabled(True)
+        self.on_verilator_source_mode_changed()
+        self._cleanup_verilator_load_thread()
+
+    def on_verilator_source_mode_changed(self) -> None:
+        use_prebuilt = self.chk_use_prebuilt_so is not None and self.chk_use_prebuilt_so.isChecked()
+        if self.verilog_path_input is not None:
+            self.verilog_path_input.setEnabled(not use_prebuilt)
+        if self.btn_browse_verilog is not None:
+            self.btn_browse_verilog.setEnabled(not use_prebuilt)
+        if self.prebuilt_so_path_input is not None:
+            self.prebuilt_so_path_input.setEnabled(use_prebuilt)
+        if self.btn_browse_prebuilt_so is not None:
+            self.btn_browse_prebuilt_so.setEnabled(use_prebuilt)
+
+    def load_simulator(self, verilog_path=None, so_path=None):
+        if so_path is not None:
+            resolved_so_path = Path(so_path).expanduser().resolve()
+            self.sim = pyverilator.PyVerilator(str(resolved_so_path), auto_eval=True)
+            return
+
         verilog_path = Path(verilog_path).expanduser().resolve()
-        self.sim = pyverilator.PyVerilator.build(str(verilog_path), top_module_name="circuit")
+        build_dir = self._cache_build_dir_for_verilog(verilog_path)
+        build_dir.mkdir(parents=True, exist_ok=True)
+        cached_lib = self._expected_cached_lib_path(build_dir)
+
+        should_rebuild = True
+        if cached_lib.exists():
+            try:
+                should_rebuild = cached_lib.stat().st_mtime < verilog_path.stat().st_mtime
+            except OSError:
+                should_rebuild = True
+
+        if should_rebuild:
+            self.sim = pyverilator.PyVerilator.build(
+                str(verilog_path),
+                top_module_name=self.top_module_name,
+                build_dir=str(build_dir),
+            )
+        else:
+            self.sim = pyverilator.PyVerilator(str(cached_lib), auto_eval=True)
+
         self.verilog_path = verilog_path
 
     def set_verilog_status(self, text, color):
@@ -349,6 +526,12 @@ class MainWindow(QMainWindow):
             self.btn_browse_verilog.setEnabled(enabled)
         if self.btn_load_verilog is not None:
             self.btn_load_verilog.setEnabled(enabled)
+        if self.chk_use_prebuilt_so is not None:
+            self.chk_use_prebuilt_so.setEnabled(enabled)
+        if self.prebuilt_so_path_input is not None:
+            self.prebuilt_so_path_input.setEnabled(enabled and self.chk_use_prebuilt_so.isChecked())
+        if self.btn_browse_prebuilt_so is not None:
+            self.btn_browse_prebuilt_so.setEnabled(enabled and self.chk_use_prebuilt_so.isChecked())
 
     def on_browse_verilog(self):
         selected, _ = QFileDialog.getOpenFileName(
@@ -361,30 +544,65 @@ class MainWindow(QMainWindow):
             self.verilog_path_input.setText(selected)
             self.on_apply_verilog_path()
 
+    def on_browse_prebuilt_so(self):
+        start_dir = str(self.verilated_cache_root if self.verilated_cache_root.exists() else self.verilog_path.parent)
+        selected, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Prebuilt Verilator sim object",
+            start_dir,
+            "All Files (*)",
+        )
+        if selected:
+            self.prebuilt_so_path_input.setText(selected)
+            self.on_apply_verilog_path()
+
     def on_apply_verilog_path(self):
-        candidate_path = Path(self.verilog_path_input.text().strip())
-        if not candidate_path.exists():
-            self.set_verilog_status("File not found", "red")
-            QMessageBox.warning(self, "Invalid Path", f"Verilog file not found:\n{candidate_path}")
+        if self.verilator_load_thread is not None and self.verilator_load_thread.isRunning():
+            QMessageBox.information(self, "Busy", "Verilator compile/load is already in progress.")
             return
 
-        previous_sim = self.sim
-        previous_path = self.verilog_path
+        use_prebuilt = self.chk_use_prebuilt_so.isChecked()
+
+        if use_prebuilt:
+            so_path = Path(self.prebuilt_so_path_input.text().strip())
+            if not so_path.exists():
+                self.set_verilog_status("Shared library not found", "red")
+                QMessageBox.warning(self, "Invalid Path", f"Shared library not found:\n{so_path}")
+                return
+        else:
+            candidate_path = Path(self.verilog_path_input.text().strip())
+            if not candidate_path.exists():
+                self.set_verilog_status("File not found", "red")
+                QMessageBox.warning(self, "Invalid Path", f"Verilog file not found:\n{candidate_path}")
+                return
+
+        self._previous_sim_before_load = self.sim
+        self._previous_path_before_load = self.verilog_path
+        self._pending_prebuilt_mode = use_prebuilt
         self.set_verilog_controls_enabled(False)
-        self.set_verilog_status("Compiling...", "orange")
+        if use_prebuilt:
+            self.set_verilog_status("Loading prebuilt shared library in background...", "orange")
+        else:
+            self.set_verilog_status(f"Building/loading cache in {self.verilated_cache_root} (background)...", "orange")
         QApplication.processEvents()
-        try:
-            self.load_simulator(candidate_path)
-            print(f"Loaded Verilog model: {self.verilog_path}")
-            self.set_verilog_status("Done", "green")
-        except Exception as e:
-            self.sim = previous_sim
-            self.verilog_path = previous_path
-            self.verilog_path_input.setText(str(previous_path))
-            self.set_verilog_status("Compile/load failed", "red")
-            QMessageBox.critical(self, "Load Error", f"Failed to load Verilog model:\n{e}")
-        finally:
-            self.set_verilog_controls_enabled(True)
+
+        worker_kwargs = {
+            "use_prebuilt_so": use_prebuilt,
+            "so_path": str(so_path) if use_prebuilt else None,
+            "verilog_path": None if use_prebuilt else str(candidate_path),
+            "build_dir": None if use_prebuilt else str(self._cache_build_dir_for_verilog(candidate_path)),
+            "top_module_name": self.top_module_name,
+        }
+
+        self.verilator_load_thread = QThread(self)
+        self.verilator_load_worker = VerilatorLoadWorker(**worker_kwargs)
+        self.verilator_load_worker.moveToThread(self.verilator_load_thread)
+        self.verilator_load_thread.started.connect(self.verilator_load_worker.run)
+        self.verilator_load_worker.finished.connect(self._on_async_verilator_load_finished)
+        self.verilator_load_worker.failed.connect(self._on_async_verilator_load_failed)
+        self.verilator_load_worker.finished.connect(self.verilator_load_thread.quit)
+        self.verilator_load_worker.failed.connect(self.verilator_load_thread.quit)
+        self.verilator_load_thread.start()
 
     def on_softmax_toggled(self):
         self.on_draw_update(self.drawing_widget.get_image_array())
