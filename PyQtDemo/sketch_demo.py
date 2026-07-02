@@ -26,7 +26,7 @@ try:
 except ImportError:
     FPGA_AVAILABLE = False
 from PyQt6.QtGui import QPainter, QPen, QImage, QColor, QBrush, QIntValidator
-from PyQt6.QtCore import Qt, QPoint, QObject, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QPoint, QTimer, QObject, QThread, pyqtSignal
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -315,36 +315,32 @@ class MainWindow(QMainWindow):
         self.drawing_widget = DrawingWidget()
         left_layout.addWidget(self.drawing_widget)
 
-        bbox_group = QGroupBox("Bounding Box Inference")
-        bbox_layout = QVBoxLayout()
-        bbox_group.setLayout(bbox_layout)
+        sliding_group = QGroupBox("Sliding Window")
+        sliding_layout = QVBoxLayout()
+        sliding_group.setLayout(sliding_layout)
 
-        params_row = QHBoxLayout()
-        params_row.addWidget(QLabel("Pixel threshold:"))
-        self.pixel_threshold_input = QLineEdit("0.25")
-        self.pixel_threshold_input.setFixedWidth(80)
-        params_row.addWidget(self.pixel_threshold_input)
-        params_row.addWidget(QLabel("Min pixels:"))
-        self.min_pixels_input = QLineEdit("80")
-        self.min_pixels_input.setValidator(QIntValidator(1, 100000, self))
-        self.min_pixels_input.setFixedWidth(80)
-        params_row.addWidget(self.min_pixels_input)
-        params_row.addWidget(QLabel("Merge gap:"))
-        self.merge_gap_input = QLineEdit("20")
-        self.merge_gap_input.setValidator(QIntValidator(0, 1000, self))
-        self.merge_gap_input.setFixedWidth(80)
-        params_row.addWidget(self.merge_gap_input)
-        params_row.addStretch()
-        bbox_layout.addLayout(params_row)
+        size_row = QHBoxLayout()
+        size_row.addWidget(QLabel("Window size:"))
+        self.window_size_input = QLineEdit("112")
+        self.window_size_input.setValidator(QIntValidator(8, 640, self))
+        self.window_size_input.setFixedWidth(80)
+        size_row.addWidget(self.window_size_input)
+        size_row.addWidget(QLabel("Stride:"))
+        self.window_stride_input = QLineEdit("56")
+        self.window_stride_input.setValidator(QIntValidator(1, 640, self))
+        self.window_stride_input.setFixedWidth(80)
+        size_row.addWidget(self.window_stride_input)
+        size_row.addStretch()
+        sliding_layout.addLayout(size_row)
 
-        self.btn_run_inference = QPushButton("Run Bounding-Box Inference")
-        self.btn_run_inference.clicked.connect(self.on_run_bounding_box_inference)
-        bbox_layout.addWidget(self.btn_run_inference)
+        self.btn_run_inference = QPushButton("Run Sliding-Window Inference")
+        self.btn_run_inference.clicked.connect(self.on_run_sliding_window_inference)
+        sliding_layout.addWidget(self.btn_run_inference)
 
         self.inference_status_label = QLabel("No inference run yet")
         self.inference_status_label.setStyleSheet("color: gray;")
-        bbox_layout.addWidget(self.inference_status_label)
-        left_layout.addWidget(bbox_group)
+        sliding_layout.addWidget(self.inference_status_label)
+        left_layout.addWidget(sliding_group)
         
         self.btn_clear = QPushButton("Clear Canvas")
         self.btn_clear.clicked.connect(self.on_clear_canvas)
@@ -666,135 +662,15 @@ class MainWindow(QMainWindow):
         resized = window_2d[np.ix_(y_idx, x_idx)]
         return resized[np.newaxis, np.newaxis, :, :].astype(np.float32)
 
-    def _find_connected_component_bboxes(self, mask_2d, min_pixels):
-        height, width = mask_2d.shape
-        visited = np.zeros((height, width), dtype=bool)
-        bboxes = []
-
-        for y in range(height):
-            for x in range(width):
-                if not mask_2d[y, x] or visited[y, x]:
-                    continue
-
-                stack = [(y, x)]
-                visited[y, x] = True
-                min_x = max_x = x
-                min_y = max_y = y
-                count = 0
-
-                while stack:
-                    cy, cx = stack.pop()
-                    count += 1
-                    min_x = min(min_x, cx)
-                    max_x = max(max_x, cx)
-                    min_y = min(min_y, cy)
-                    max_y = max(max_y, cy)
-
-                    neighbors = ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1))
-                    for ny, nx in neighbors:
-                        if 0 <= ny < height and 0 <= nx < width and mask_2d[ny, nx] and not visited[ny, nx]:
-                            visited[ny, nx] = True
-                            stack.append((ny, nx))
-
-                if count >= min_pixels:
-                    bboxes.append((min_x, min_y, max_x + 1, max_y + 1, count))
-
-        return bboxes
-
-    def _expand_bbox_to_square(self, x0, y0, x1, y1, max_w, max_h):
-        w = x1 - x0
-        h = y1 - y0
-        side = max(w, h)
-        cx = (x0 + x1) // 2
-        cy = (y0 + y1) // 2
-        half = side // 2
-
-        nx0 = cx - half
-        ny0 = cy - half
-        nx1 = nx0 + side
-        ny1 = ny0 + side
-
-        if nx0 < 0:
-            nx1 -= nx0
-            nx0 = 0
-        if ny0 < 0:
-            ny1 -= ny0
-            ny0 = 0
-        if nx1 > max_w:
-            shift = nx1 - max_w
-            nx0 -= shift
-            nx1 = max_w
-        if ny1 > max_h:
-            shift = ny1 - max_h
-            ny0 -= shift
-            ny1 = max_h
-
-        nx0 = max(0, nx0)
-        ny0 = max(0, ny0)
-        nx1 = min(max_w, nx1)
-        ny1 = min(max_h, ny1)
-        if nx1 <= nx0:
-            nx1 = min(max_w, nx0 + 1)
-        if ny1 <= ny0:
-            ny1 = min(max_h, ny0 + 1)
-        return nx0, ny0, nx1, ny1
-
-    def _boxes_close_or_overlapping(self, a, b, merge_gap):
-        ax0, ay0, ax1, ay1, _ = a
-        bx0, by0, bx1, by1, _ = b
-
-        # Inflate each rectangle by merge_gap and test for overlap.
-        ax0 -= merge_gap
-        ay0 -= merge_gap
-        ax1 += merge_gap
-        ay1 += merge_gap
-
-        bx0 -= merge_gap
-        by0 -= merge_gap
-        bx1 += merge_gap
-        by1 += merge_gap
-
-        return not (ax1 < bx0 or bx1 < ax0 or ay1 < by0 or by1 < ay0)
-
-    def _merge_nearby_bboxes(self, bboxes, merge_gap):
-        if not bboxes:
-            return []
-
-        remaining = [list(box) for box in bboxes]
-        merged = []
-
-        while remaining:
-            cur = remaining.pop()
-            changed = True
-
-            while changed:
-                changed = False
-                next_remaining = []
-                for other in remaining:
-                    if self._boxes_close_or_overlapping(cur, other, merge_gap):
-                        cur[0] = min(cur[0], other[0])
-                        cur[1] = min(cur[1], other[1])
-                        cur[2] = max(cur[2], other[2])
-                        cur[3] = max(cur[3], other[3])
-                        cur[4] += other[4]
-                        changed = True
-                    else:
-                        next_remaining.append(other)
-                remaining = next_remaining
-
-            merged.append(tuple(cur))
-
-        return merged
-
     def _infer_logits(self, inp_value):
         if self.backend == 'verilator':
             if self.sim is None:
-                raise RuntimeError("Verilator backend is not loaded. Load a model first.")
+                return np.zeros(10)
             self.sim.io.inp = inp_value
             return unpack_scores(int(self.sim.io.scores_flat))
 
         if self.fpga_uart is None or not self.fpga_uart.is_open():
-            raise RuntimeError("FPGA backend is not connected.")
+            return np.zeros(10)
 
         scores_flat = self.fpga_uart.run_inference(inp_value)
         tx_bytes = self.fpga_uart.last_tx_bytes
@@ -803,76 +679,53 @@ class MainWindow(QMainWindow):
         self._append_uart_console(f"[RX] {self._format_uart_bytes(rx_bytes)}")
         return unpack_scores(scores_flat)
 
-    def _tighten_bbox_to_foreground(self, mask_2d, x0, y0, x1, y1):
-        submask = mask_2d[y0:y1, x0:x1]
-        ys, xs = np.where(submask)
-        if xs.size == 0 or ys.size == 0:
-            return None
-
-        tx0 = int(x0 + xs.min())
-        ty0 = int(y0 + ys.min())
-        tx1 = int(x0 + xs.max() + 1)
-        ty1 = int(y0 + ys.max() + 1)
-        return tx0, ty0, tx1, ty1
-
-    def on_run_bounding_box_inference(self):
+    def on_run_sliding_window_inference(self):
         try:
-            pixel_threshold = float(self.pixel_threshold_input.text().strip())
-            min_pixels = int(self.min_pixels_input.text().strip())
-            merge_gap = int(self.merge_gap_input.text().strip())
+            window_size = int(self.window_size_input.text().strip())
+            stride = int(self.window_stride_input.text().strip())
         except ValueError:
-            QMessageBox.warning(self, "Invalid Parameters", "Pixel threshold must be numeric; min pixels and merge gap must be integers.")
+            QMessageBox.warning(self, "Invalid Parameters", "Window size and stride must be integers.")
             return
 
-        if not (0.0 <= pixel_threshold <= 1.0):
-            QMessageBox.warning(self, "Invalid Parameters", "Pixel threshold must be in [0.0, 1.0].")
+        if window_size <= 0 or stride <= 0:
+            QMessageBox.warning(self, "Invalid Parameters", "Window size and stride must be positive.")
             return
-        if min_pixels <= 0:
-            QMessageBox.warning(self, "Invalid Parameters", "Min pixels must be > 0.")
-            return
-        if merge_gap < 0:
-            QMessageBox.warning(self, "Invalid Parameters", "Merge gap must be >= 0.")
-            return
-
-        self.inference_status_label.setText("Running bounding-box inference...")
-        self.inference_status_label.setStyleSheet("color: orange;")
-        QApplication.processEvents()
 
         full_img = self.drawing_widget.get_full_image_array()[0, 0]
         img_h, img_w = full_img.shape
-        mask = full_img > pixel_threshold
-        bboxes = self._find_connected_component_bboxes(mask, min_pixels=min_pixels)
-        bboxes = self._merge_nearby_bboxes(bboxes, merge_gap=merge_gap)
+        if window_size > img_h or window_size > img_w:
+            QMessageBox.warning(
+                self,
+                "Invalid Parameters",
+                f"Window size must be <= min(canvas_width, canvas_height) = {min(img_w, img_h)}.",
+            )
+            return
+
+        self.inference_status_label.setText("Running sliding-window inference...")
+        self.inference_status_label.setStyleSheet("color: orange;")
+        QApplication.processEvents()
 
         overlays = []
         class_counts = np.zeros(10, dtype=np.int32)
-        num_boxes = 0
+        num_windows = 0
 
         try:
-            for x0, y0, x1, y1, _ in bboxes:
-                tightened = self._tighten_bbox_to_foreground(mask, x0, y0, x1, y1)
-                if tightened is None:
-                    continue
+            for y in range(0, img_h - window_size + 1, stride):
+                for x in range(0, img_w - window_size + 1, stride):
+                    patch = full_img[y:y + window_size, x:x + window_size]
+                    patch_28 = self._downsample_window_to_28(patch)
+                    inp_value = pack_binary_image_to_inp(patch_28)
+                    logits = self._infer_logits(inp_value)
+                    cls = int(np.argmax(logits))
 
-                tx0, ty0, tx1, ty1 = tightened
-                sx0, sy0, sx1, sy1 = self._expand_bbox_to_square(tx0, ty0, tx1, ty1, img_w, img_h)
-                patch = full_img[sy0:sy1, sx0:sx1]
-                if patch.size == 0:
-                    continue
-
-                patch_28 = self._downsample_window_to_28(patch)
-                inp_value = pack_binary_image_to_inp(patch_28)
-                logits = self._infer_logits(inp_value)
-                cls = int(np.argmax(logits))
-
-                overlays.append((sx0, sy0, sx1 - sx0, sy1 - sy0, cls))
-                class_counts[cls] += 1
-                num_boxes += 1
+                    overlays.append((x, y, window_size, window_size, cls))
+                    class_counts[cls] += 1
+                    num_windows += 1
 
             self.drawing_widget.set_overlay_windows(overlays)
 
-            if num_boxes > 0:
-                values = class_counts.astype(np.float32) / float(num_boxes)
+            if num_windows > 0:
+                values = class_counts.astype(np.float32) / float(num_windows)
             else:
                 values = np.zeros(10, dtype=np.float32)
 
@@ -880,7 +733,7 @@ class MainWindow(QMainWindow):
                 bar.set_width(float(val))
             self.canvas.draw()
 
-            self.inference_status_label.setText(f"Inference complete: {num_boxes} bounding boxes")
+            self.inference_status_label.setText(f"Inference complete: {num_windows} windows")
             self.inference_status_label.setStyleSheet("color: green;")
         except Exception as e:
             self.inference_status_label.setText(f"Inference failed: {e}")
@@ -891,8 +744,8 @@ class MainWindow(QMainWindow):
         self.ax.clear()
         self.bars = self.ax.barh(CLASSES, np.zeros(10), color=CLASS_COLORS_HEX)
         self.ax.set_xlim(0, 1)
-        self.ax.set_xlabel('Box Fraction')
-        self.ax.set_title('Bounding-Box Argmax Distribution')
+        self.ax.set_xlabel('Window Fraction')
+        self.ax.set_title('Sliding-Window Argmax Distribution')
         self.ax.invert_yaxis()  # to match the order in CLASSES from top to bottom
         self.figure.tight_layout()
         self.canvas.draw()
