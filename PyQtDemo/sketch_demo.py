@@ -25,13 +25,25 @@ try:
     FPGA_AVAILABLE = True
 except ImportError:
     FPGA_AVAILABLE = False
-from PyQt6.QtGui import QPainter, QPen, QImage
-from PyQt6.QtCore import Qt, QPoint, QTimer, QObject, QThread, pyqtSignal
+from PyQt6.QtGui import QPainter, QPen, QImage, QColor, QBrush, QIntValidator
+from PyQt6.QtCore import Qt, QPoint, QObject, QThread, pyqtSignal
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+CLASS_COLORS_HEX = [
+    "#e63946",
+    "#f4a261",
+    "#e9c46a",
+    "#2a9d8f",
+    "#457b9d",
+    "#264653",
+    "#8ab17d",
+    "#6d597a",
+    "#ff6b6b",
+    "#00b4d8",
+]
 
 
 def to_signed32(value):
@@ -105,24 +117,25 @@ class VerilatorLoadWorker(QObject):
             self.failed.emit(str(exc))
 
 class DrawingWidget(QWidget):
-    def __init__(self, update_callback):
+    def __init__(self):
         super().__init__()
-        self.setFixedSize(280, 280)
+        self.setFixedSize(640, 480)
         self.image = QImage(self.size(), QImage.Format.Format_RGB32)
         self.image.fill(Qt.GlobalColor.black)  # black background
+        self.overlay_windows = []
+        self.class_colors = [QColor(hex_color) for hex_color in CLASS_COLORS_HEX]
         
         self.drawing = False
         self.last_point = QPoint()
-        self.update_callback = update_callback
-        
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.trigger_update)
-        self.timer.setSingleShot(True)
         
     def clear(self):
         self.image.fill(Qt.GlobalColor.black)
+        self.overlay_windows = []
         self.update()
-        self.update_callback(self.get_image_array())
+
+    def set_overlay_windows(self, windows):
+        self.overlay_windows = windows
+        self.update()
         
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -137,32 +150,35 @@ class DrawingWidget(QWidget):
             self.last_point = event.pos()
             self.update()
             
-            # Reset timer to update prediction shortly after the stroke
-            self.timer.start(50) 
-            
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
             self.drawing = False
-            self.trigger_update()
             
     def paintEvent(self, event):
         canvas_painter = QPainter(self)
         canvas_painter.drawImage(self.rect(), self.image, self.image.rect())
+
+        for x, y, w, h, class_idx in self.overlay_windows:
+            color = self.class_colors[class_idx % len(self.class_colors)]
+            fill = QColor(color)
+            fill.setAlpha(70)
+            border = QColor(color)
+            border.setAlpha(210)
+
+            canvas_painter.setPen(QPen(border, 2))
+            canvas_painter.setBrush(QBrush(fill))
+            canvas_painter.drawRect(x, y, w, h)
+            canvas_painter.setPen(QPen(Qt.GlobalColor.white, 1))
+            canvas_painter.drawText(x + 4, y + 16, CLASSES[class_idx])
         
-    def trigger_update(self):
-        img_array = self.get_image_array()
-        self.update_callback(img_array)
-        
-    def get_image_array(self):
-        # Scale to 28x28 for model input.
-        scaled_img = self.image.scaled(28, 28, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-        
-        gray = np.zeros((28, 28), dtype=np.float32)
-        for y in range(28):
-            for x in range(28):
-                gray[y, x] = scaled_img.pixelColor(x, y).red() / 255.0
-        
-        # Expand dims for batch and channel: (1, 1, 28, 28).
+    def get_full_image_array(self):
+        width = self.image.width()
+        height = self.image.height()
+        gray = np.zeros((height, width), dtype=np.float32)
+        for y in range(height):
+            for x in range(width):
+                gray[y, x] = self.image.pixelColor(x, y).red() / 255.0
+
         gray = np.expand_dims(gray, axis=(0, 1))
         return gray
 
@@ -185,6 +201,7 @@ class MainWindow(QMainWindow):
         self._previous_sim_before_load = None
         self._previous_path_before_load = None
         self._pending_prebuilt_mode = False
+        self.class_colors = [QColor(hex_color) for hex_color in CLASS_COLORS_HEX]
 
         # Inference backend state
         self.backend = 'verilator'   # 'verilator' | 'fpga'
@@ -295,17 +312,43 @@ class MainWindow(QMainWindow):
         left_layout.addWidget(self.verilog_status_label)
         self.set_verilog_status("Not loaded (press Load)", "gray")
 
-        self.drawing_widget = DrawingWidget(self.on_draw_update)
+        self.drawing_widget = DrawingWidget()
         left_layout.addWidget(self.drawing_widget)
+
+        bbox_group = QGroupBox("Bounding Box Inference")
+        bbox_layout = QVBoxLayout()
+        bbox_group.setLayout(bbox_layout)
+
+        params_row = QHBoxLayout()
+        params_row.addWidget(QLabel("Pixel threshold:"))
+        self.pixel_threshold_input = QLineEdit("0.25")
+        self.pixel_threshold_input.setFixedWidth(80)
+        params_row.addWidget(self.pixel_threshold_input)
+        params_row.addWidget(QLabel("Min pixels:"))
+        self.min_pixels_input = QLineEdit("80")
+        self.min_pixels_input.setValidator(QIntValidator(1, 100000, self))
+        self.min_pixels_input.setFixedWidth(80)
+        params_row.addWidget(self.min_pixels_input)
+        params_row.addWidget(QLabel("Merge gap:"))
+        self.merge_gap_input = QLineEdit("20")
+        self.merge_gap_input.setValidator(QIntValidator(0, 1000, self))
+        self.merge_gap_input.setFixedWidth(80)
+        params_row.addWidget(self.merge_gap_input)
+        params_row.addStretch()
+        bbox_layout.addLayout(params_row)
+
+        self.btn_run_inference = QPushButton("Run Bounding-Box Inference")
+        self.btn_run_inference.clicked.connect(self.on_run_bounding_box_inference)
+        bbox_layout.addWidget(self.btn_run_inference)
+
+        self.inference_status_label = QLabel("No inference run yet")
+        self.inference_status_label.setStyleSheet("color: gray;")
+        bbox_layout.addWidget(self.inference_status_label)
+        left_layout.addWidget(bbox_group)
         
         self.btn_clear = QPushButton("Clear Canvas")
-        self.btn_clear.clicked.connect(self.drawing_widget.clear)
+        self.btn_clear.clicked.connect(self.on_clear_canvas)
         left_layout.addWidget(self.btn_clear)
-
-        self.chk_softmax = QCheckBox("Apply Softmax")
-        self.chk_softmax.setChecked(True)
-        self.chk_softmax.stateChanged.connect(self.on_softmax_toggled)
-        left_layout.addWidget(self.chk_softmax)
         left_layout.addStretch()
         
         layout.addLayout(left_layout)
@@ -318,7 +361,7 @@ class MainWindow(QMainWindow):
         self.init_plot()
         self.on_verilator_source_mode_changed()
         self._set_backend_visibility()
-        self.drawing_widget.clear() # trigger initial plot 
+        self.on_clear_canvas()
 
     # ------------------------------------------------------------------
     # Backend switching helpers
@@ -372,8 +415,9 @@ class MainWindow(QMainWindow):
             self.set_verilog_controls_enabled(False)
             self._set_uart_controls_visible(True)
         self._set_backend_visibility()
-        # Clear bars when switching backend
-        self.on_draw_update(self.drawing_widget.get_image_array())
+        self.inference_status_label.setText("Backend changed. Run inference.")
+        self.inference_status_label.setStyleSheet("color: gray;")
+        self._reset_plot_values()
 
     def on_uart_connect_toggle(self) -> None:
         if self.fpga_uart is not None and self.fpga_uart.is_open():
@@ -604,62 +648,253 @@ class MainWindow(QMainWindow):
         self.verilator_load_worker.failed.connect(self.verilator_load_thread.quit)
         self.verilator_load_thread.start()
 
-    def on_softmax_toggled(self):
-        self.on_draw_update(self.drawing_widget.get_image_array())
+    def on_clear_canvas(self):
+        self.drawing_widget.clear()
+        self._reset_plot_values()
+        self.inference_status_label.setText("Canvas cleared")
+        self.inference_status_label.setStyleSheet("color: gray;")
+
+    def _reset_plot_values(self):
+        for bar in self.bars:
+            bar.set_width(0.0)
+        self.canvas.draw()
+
+    def _downsample_window_to_28(self, window_2d):
+        src_h, src_w = window_2d.shape
+        y_idx = np.linspace(0, src_h - 1, 28).astype(np.int32)
+        x_idx = np.linspace(0, src_w - 1, 28).astype(np.int32)
+        resized = window_2d[np.ix_(y_idx, x_idx)]
+        return resized[np.newaxis, np.newaxis, :, :].astype(np.float32)
+
+    def _find_connected_component_bboxes(self, mask_2d, min_pixels):
+        height, width = mask_2d.shape
+        visited = np.zeros((height, width), dtype=bool)
+        bboxes = []
+
+        for y in range(height):
+            for x in range(width):
+                if not mask_2d[y, x] or visited[y, x]:
+                    continue
+
+                stack = [(y, x)]
+                visited[y, x] = True
+                min_x = max_x = x
+                min_y = max_y = y
+                count = 0
+
+                while stack:
+                    cy, cx = stack.pop()
+                    count += 1
+                    min_x = min(min_x, cx)
+                    max_x = max(max_x, cx)
+                    min_y = min(min_y, cy)
+                    max_y = max(max_y, cy)
+
+                    neighbors = ((cy - 1, cx), (cy + 1, cx), (cy, cx - 1), (cy, cx + 1))
+                    for ny, nx in neighbors:
+                        if 0 <= ny < height and 0 <= nx < width and mask_2d[ny, nx] and not visited[ny, nx]:
+                            visited[ny, nx] = True
+                            stack.append((ny, nx))
+
+                if count >= min_pixels:
+                    bboxes.append((min_x, min_y, max_x + 1, max_y + 1, count))
+
+        return bboxes
+
+    def _expand_bbox_to_square(self, x0, y0, x1, y1, max_w, max_h):
+        w = x1 - x0
+        h = y1 - y0
+        side = max(w, h)
+        cx = (x0 + x1) // 2
+        cy = (y0 + y1) // 2
+        half = side // 2
+
+        nx0 = cx - half
+        ny0 = cy - half
+        nx1 = nx0 + side
+        ny1 = ny0 + side
+
+        if nx0 < 0:
+            nx1 -= nx0
+            nx0 = 0
+        if ny0 < 0:
+            ny1 -= ny0
+            ny0 = 0
+        if nx1 > max_w:
+            shift = nx1 - max_w
+            nx0 -= shift
+            nx1 = max_w
+        if ny1 > max_h:
+            shift = ny1 - max_h
+            ny0 -= shift
+            ny1 = max_h
+
+        nx0 = max(0, nx0)
+        ny0 = max(0, ny0)
+        nx1 = min(max_w, nx1)
+        ny1 = min(max_h, ny1)
+        if nx1 <= nx0:
+            nx1 = min(max_w, nx0 + 1)
+        if ny1 <= ny0:
+            ny1 = min(max_h, ny0 + 1)
+        return nx0, ny0, nx1, ny1
+
+    def _boxes_close_or_overlapping(self, a, b, merge_gap):
+        ax0, ay0, ax1, ay1, _ = a
+        bx0, by0, bx1, by1, _ = b
+
+        # Inflate each rectangle by merge_gap and test for overlap.
+        ax0 -= merge_gap
+        ay0 -= merge_gap
+        ax1 += merge_gap
+        ay1 += merge_gap
+
+        bx0 -= merge_gap
+        by0 -= merge_gap
+        bx1 += merge_gap
+        by1 += merge_gap
+
+        return not (ax1 < bx0 or bx1 < ax0 or ay1 < by0 or by1 < ay0)
+
+    def _merge_nearby_bboxes(self, bboxes, merge_gap):
+        if not bboxes:
+            return []
+
+        remaining = [list(box) for box in bboxes]
+        merged = []
+
+        while remaining:
+            cur = remaining.pop()
+            changed = True
+
+            while changed:
+                changed = False
+                next_remaining = []
+                for other in remaining:
+                    if self._boxes_close_or_overlapping(cur, other, merge_gap):
+                        cur[0] = min(cur[0], other[0])
+                        cur[1] = min(cur[1], other[1])
+                        cur[2] = max(cur[2], other[2])
+                        cur[3] = max(cur[3], other[3])
+                        cur[4] += other[4]
+                        changed = True
+                    else:
+                        next_remaining.append(other)
+                remaining = next_remaining
+
+            merged.append(tuple(cur))
+
+        return merged
+
+    def _infer_logits(self, inp_value):
+        if self.backend == 'verilator':
+            if self.sim is None:
+                raise RuntimeError("Verilator backend is not loaded. Load a model first.")
+            self.sim.io.inp = inp_value
+            return unpack_scores(int(self.sim.io.scores_flat))
+
+        if self.fpga_uart is None or not self.fpga_uart.is_open():
+            raise RuntimeError("FPGA backend is not connected.")
+
+        scores_flat = self.fpga_uart.run_inference(inp_value)
+        tx_bytes = self.fpga_uart.last_tx_bytes
+        rx_bytes = self.fpga_uart.last_rx_bytes
+        self._append_uart_console(f"[TX] {self._format_uart_bytes(tx_bytes)}")
+        self._append_uart_console(f"[RX] {self._format_uart_bytes(rx_bytes)}")
+        return unpack_scores(scores_flat)
+
+    def _tighten_bbox_to_foreground(self, mask_2d, x0, y0, x1, y1):
+        submask = mask_2d[y0:y1, x0:x1]
+        ys, xs = np.where(submask)
+        if xs.size == 0 or ys.size == 0:
+            return None
+
+        tx0 = int(x0 + xs.min())
+        ty0 = int(y0 + ys.min())
+        tx1 = int(x0 + xs.max() + 1)
+        ty1 = int(y0 + ys.max() + 1)
+        return tx0, ty0, tx1, ty1
+
+    def on_run_bounding_box_inference(self):
+        try:
+            pixel_threshold = float(self.pixel_threshold_input.text().strip())
+            min_pixels = int(self.min_pixels_input.text().strip())
+            merge_gap = int(self.merge_gap_input.text().strip())
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Parameters", "Pixel threshold must be numeric; min pixels and merge gap must be integers.")
+            return
+
+        if not (0.0 <= pixel_threshold <= 1.0):
+            QMessageBox.warning(self, "Invalid Parameters", "Pixel threshold must be in [0.0, 1.0].")
+            return
+        if min_pixels <= 0:
+            QMessageBox.warning(self, "Invalid Parameters", "Min pixels must be > 0.")
+            return
+        if merge_gap < 0:
+            QMessageBox.warning(self, "Invalid Parameters", "Merge gap must be >= 0.")
+            return
+
+        self.inference_status_label.setText("Running bounding-box inference...")
+        self.inference_status_label.setStyleSheet("color: orange;")
+        QApplication.processEvents()
+
+        full_img = self.drawing_widget.get_full_image_array()[0, 0]
+        img_h, img_w = full_img.shape
+        mask = full_img > pixel_threshold
+        bboxes = self._find_connected_component_bboxes(mask, min_pixels=min_pixels)
+        bboxes = self._merge_nearby_bboxes(bboxes, merge_gap=merge_gap)
+
+        overlays = []
+        class_counts = np.zeros(10, dtype=np.int32)
+        num_boxes = 0
+
+        try:
+            for x0, y0, x1, y1, _ in bboxes:
+                tightened = self._tighten_bbox_to_foreground(mask, x0, y0, x1, y1)
+                if tightened is None:
+                    continue
+
+                tx0, ty0, tx1, ty1 = tightened
+                sx0, sy0, sx1, sy1 = self._expand_bbox_to_square(tx0, ty0, tx1, ty1, img_w, img_h)
+                patch = full_img[sy0:sy1, sx0:sx1]
+                if patch.size == 0:
+                    continue
+
+                patch_28 = self._downsample_window_to_28(patch)
+                inp_value = pack_binary_image_to_inp(patch_28)
+                logits = self._infer_logits(inp_value)
+                cls = int(np.argmax(logits))
+
+                overlays.append((sx0, sy0, sx1 - sx0, sy1 - sy0, cls))
+                class_counts[cls] += 1
+                num_boxes += 1
+
+            self.drawing_widget.set_overlay_windows(overlays)
+
+            if num_boxes > 0:
+                values = class_counts.astype(np.float32) / float(num_boxes)
+            else:
+                values = np.zeros(10, dtype=np.float32)
+
+            for bar, val in zip(self.bars, values):
+                bar.set_width(float(val))
+            self.canvas.draw()
+
+            self.inference_status_label.setText(f"Inference complete: {num_boxes} bounding boxes")
+            self.inference_status_label.setStyleSheet("color: green;")
+        except Exception as e:
+            self.inference_status_label.setText(f"Inference failed: {e}")
+            self.inference_status_label.setStyleSheet("color: red;")
+            QMessageBox.critical(self, "Inference Error", str(e))
 
     def init_plot(self):
         self.ax.clear()
-        self.bars = self.ax.barh(CLASSES, np.zeros(10), color='skyblue')
+        self.bars = self.ax.barh(CLASSES, np.zeros(10), color=CLASS_COLORS_HEX)
         self.ax.set_xlim(0, 1)
-        self.ax.set_xlabel('Probability')
-        self.ax.set_title('Live Prediction')
+        self.ax.set_xlabel('Box Fraction')
+        self.ax.set_title('Bounding-Box Argmax Distribution')
         self.ax.invert_yaxis()  # to match the order in CLASSES from top to bottom
         self.figure.tight_layout()
-        self.canvas.draw()
-        
-    def on_draw_update(self, img_array):
-        use_softmax = self.chk_softmax.isChecked()
-        try:
-            inp_value = pack_binary_image_to_inp(img_array)
-
-            if self.backend == 'verilator':
-                if self.sim is None:
-                    logits = np.zeros(10)
-                else:
-                    self.sim.io.inp = inp_value
-                    logits = unpack_scores(int(self.sim.io.scores_flat))
-            else:  # fpga
-                if self.fpga_uart is None or not self.fpga_uart.is_open():
-                    logits = np.zeros(10)
-                else:
-                    scores_flat = self.fpga_uart.run_inference(inp_value)
-                    tx_bytes = self.fpga_uart.last_tx_bytes
-                    rx_bytes = self.fpga_uart.last_rx_bytes
-                    self._append_uart_console(f"[TX] {self._format_uart_bytes(tx_bytes)}")
-                    self._append_uart_console(f"[RX] {self._format_uart_bytes(rx_bytes)}")
-                    logits = unpack_scores(scores_flat)
-
-            if use_softmax:
-                exp_logits = np.exp(logits - np.max(logits))
-                values = exp_logits / exp_logits.sum()
-            else:
-                values = logits
-
-        except Exception as e:
-            print(f"Inference error: {e}")
-            values = np.zeros(10)
-
-        # Update axis limits based on softmax setting
-        if use_softmax:
-            self.ax.set_xlim(0, 1)
-            self.ax.set_xlabel('Probability')
-        else:
-            self.ax.set_xlim(0, 200)
-            self.ax.set_xlabel('Score')
-
-        # Update plot bars
-        for bar, val in zip(self.bars, values):
-            bar.set_width(val)
         self.canvas.draw()
 
 if __name__ == "__main__":
