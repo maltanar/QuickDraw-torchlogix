@@ -58,7 +58,7 @@ wire [3:0] cam_G = pixin[7:4];
 wire [3:0] cam_B = pixin[3:0];
 // 4-bit grayscale conversion using weighted average
 wire [3:0] cam_Y = ((cam_R * 5) + (cam_G * 9) + (cam_B * 2)) >> 4;
-wire bw_pixel = (cam_Y >= bw_threshold);
+wire bw_pixel = (cam_Y < bw_threshold);
 
 assign vga_R = inDisplayArea ? (bw_pixel ? 4'hF : 4'h0) : 4'h0;
 assign vga_G = inDisplayArea ? (bw_pixel ? 4'hF : 4'h0) : 4'h0;
