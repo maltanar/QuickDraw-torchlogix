@@ -2,6 +2,9 @@
 module top
 (
   input clk,
+  input btn,
+  input rx_i,
+  output tx_o,
   input [7:0] cam_data,
   input cam_PCLK,
   input cam_HREF,
@@ -23,7 +26,7 @@ wire clk_25MHz;
 
 pll pll_i(
 	.clock_in(clk),             // 10 MHz input
-	.clock_out(clk_25MHz),      // 25 MHz output 
+  .clock_out(clk_25MHz)       // 25 MHz output 
 );
 
 // You do not need to connect PWON and RESET pins, but if you do you need this
@@ -100,12 +103,71 @@ camera_read cam_read(
     .col(col)
 );
 
-	reg [5:0] reset_cnt = 0;
-	wire resetn = &reset_cnt;
+  reg [5:0] reset_cnt = 0;
+  wire resetn = (&reset_cnt) & btn;
 
 	always @(posedge clk_25MHz) begin
 		reset_cnt <= reset_cnt + !resetn;
 	end
+
+wire [7:0] uart_rx_data;
+wire uart_rx_valid;
+wire uart_tx_busy;
+wire [7:0] uart_tx_din;
+wire uart_tx_wr;
+reg uart_send_active;
+reg [2:0] uart_msg_idx;
+
+assign uart_tx_din =
+  (uart_msg_idx == 3'd0) ? "H" :
+  (uart_msg_idx == 3'd1) ? "e" :
+  (uart_msg_idx == 3'd2) ? "l" :
+  (uart_msg_idx == 3'd3) ? "l" :
+                           "o";
+assign uart_tx_wr = uart_send_active && !uart_tx_busy;
+
+uart_rx #(
+  .CLK_FREQ(25000000),
+  .BAUD_RATE(115200)
+) uart_rx_i (
+  .clk(clk_25MHz),
+  .rst_n(resetn),
+  .rx(rx_i),
+  .data(uart_rx_data),
+  .valid(uart_rx_valid)
+);
+
+uart_tx #(
+  .CLK_FREQ(25000000),
+  .BAUD_RATE(115200)
+) uart_tx_i (
+  .clk(clk_25MHz),
+  .rst_n(resetn),
+  .din(uart_tx_din),
+  .wr(uart_tx_wr),
+  .busy(uart_tx_busy),
+  .tx(tx_o)
+);
+
+always @(posedge clk_25MHz or negedge resetn) begin
+  if (!resetn) begin
+    uart_send_active <= 1'b0;
+    uart_msg_idx <= 3'd0;
+  end else begin
+    if (uart_rx_valid && (uart_rx_data == 8'h3F) && !uart_send_active) begin
+      uart_send_active <= 1'b1;
+      uart_msg_idx <= 3'd0;
+    end
+
+    if (uart_send_active && !uart_tx_busy) begin
+      if (uart_msg_idx == 3'd4) begin
+        uart_send_active <= 1'b0;
+      end else begin
+        uart_msg_idx <= uart_msg_idx + 3'd1;
+      end
+    end
+  end
+end
 
 camera_configure cam_configure
 (

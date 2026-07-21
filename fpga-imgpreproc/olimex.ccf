@@ -2,6 +2,10 @@ Pin_in  "clk"    Loc = "IO_SB_A8" | SCHMITT_TRIGGER=true;
 
 Pin_in  "btn"    Loc = "IO_SB_B7" | PULLUP=true; # FPGA_BUT
 
+# UART - same mapping as fpga/quickdraw.ccf (RP2040 USB-CDC bridge)
+Net "rx_i"   Loc = "IO_SA_A6";
+Net "tx_o"   Loc = "IO_SA_B6";
+
 #J1
 Pin_out "vga_R[0]" Loc = "IO_WB_B3";
 Pin_out "vga_R[1]" Loc = "IO_WB_A3";
