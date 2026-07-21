@@ -57,11 +57,12 @@ wire [3:0] cam_R = pixin[11:8];
 wire [3:0] cam_G = pixin[7:4];
 wire [3:0] cam_B = pixin[3:0];
 // 4-bit grayscale conversion using weighted average
-//wire [3:0] cam_Y = ((cam_R * 5) + (cam_G * 9) + (cam_B * 2)) >> 4;
+wire [3:0] cam_Y = ((cam_R * 5) + (cam_G * 9) + (cam_B * 2)) >> 4;
+wire bw_pixel = (cam_Y >= bw_threshold);
 
-assign vga_R = inDisplayArea? cam_R:0;
-assign vga_G = inDisplayArea? cam_G:0;
-assign vga_B = inDisplayArea? cam_B:0;
+assign vga_R = inDisplayArea ? (bw_pixel ? 4'hF : 4'h0) : 4'h0;
+assign vga_G = inDisplayArea ? (bw_pixel ? 4'hF : 4'h0) : 4'h0;
+assign vga_B = inDisplayArea ? (bw_pixel ? 4'hF : 4'h0) : 4'h0;
 
 wire [7:0] xin = CounterX[9:2];
 wire [7:0] yin = 8'd255 - CounterY[8:1];
@@ -117,6 +118,7 @@ wire [7:0] uart_tx_din;
 wire uart_tx_wr;
 reg uart_send_active;
 reg [2:0] uart_msg_idx;
+reg [3:0] bw_threshold;
 
 assign uart_tx_din =
   (uart_msg_idx == 3'd0) ? "H" :
@@ -153,10 +155,21 @@ always @(posedge clk_25MHz or negedge resetn) begin
   if (!resetn) begin
     uart_send_active <= 1'b0;
     uart_msg_idx <= 3'd0;
+    bw_threshold <= 4'd7;
   end else begin
-    if (uart_rx_valid && (uart_rx_data == 8'h3F) && !uart_send_active) begin
-      uart_send_active <= 1'b1;
-      uart_msg_idx <= 3'd0;
+    if (uart_rx_valid) begin
+      if (uart_rx_data == 8'h2B) begin // '+' increases threshold
+        if (bw_threshold < 4'd15) begin
+          bw_threshold <= bw_threshold + 4'd1;
+        end
+      end else if (uart_rx_data == 8'h2D) begin // '-' decreases threshold
+        if (bw_threshold > 4'd0) begin
+          bw_threshold <= bw_threshold - 4'd1;
+        end
+      end else if ((uart_rx_data == 8'h3F) && !uart_send_active) begin
+        uart_send_active <= 1'b1;
+        uart_msg_idx <= 3'd0;
+      end
     end
 
     if (uart_send_active && !uart_tx_busy) begin
