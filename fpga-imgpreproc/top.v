@@ -65,6 +65,174 @@ localparam [8:0] VGA_H = 9'd480;
 localparam [9:0] BORDER_THICK = 10'd2;
 localparam [9:0] MOVE_STEP_X = 10'd4;
 localparam [8:0] MOVE_STEP_Y = 9'd4;
+localparam [9:0] TEXT_X_OFF = 10'd6;
+localparam [8:0] TEXT_Y_OFF = 9'd6;
+
+function [3:0] font4x4_row;
+  input [7:0] ch;
+  input [1:0] row;
+  begin
+    case (ch)
+      "A": case (row)
+        2'd0: font4x4_row = 4'b0110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1111;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "B": case (row)
+        2'd0: font4x4_row = 4'b1110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1110;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "C": case (row)
+        2'd0: font4x4_row = 4'b0111;
+        2'd1: font4x4_row = 4'b1000;
+        2'd2: font4x4_row = 4'b1000;
+        default: font4x4_row = 4'b0111;
+      endcase
+      "D": case (row)
+        2'd0: font4x4_row = 4'b1110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1001;
+        default: font4x4_row = 4'b1110;
+      endcase
+      "E": case (row)
+        2'd0: font4x4_row = 4'b1111;
+        2'd1: font4x4_row = 4'b1110;
+        2'd2: font4x4_row = 4'b1000;
+        default: font4x4_row = 4'b1111;
+      endcase
+      "F": case (row)
+        2'd0: font4x4_row = 4'b1111;
+        2'd1: font4x4_row = 4'b1110;
+        2'd2: font4x4_row = 4'b1000;
+        default: font4x4_row = 4'b1000;
+      endcase
+      "G": case (row)
+        2'd0: font4x4_row = 4'b0111;
+        2'd1: font4x4_row = 4'b1000;
+        2'd2: font4x4_row = 4'b1011;
+        default: font4x4_row = 4'b0111;
+      endcase
+      "H": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1111;
+        2'd2: font4x4_row = 4'b1001;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "I": case (row)
+        2'd0: font4x4_row = 4'b1111;
+        2'd1: font4x4_row = 4'b0110;
+        2'd2: font4x4_row = 4'b0110;
+        default: font4x4_row = 4'b1111;
+      endcase
+      "J": case (row)
+        2'd0: font4x4_row = 4'b0011;
+        2'd1: font4x4_row = 4'b0001;
+        2'd2: font4x4_row = 4'b1001;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "K": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1010;
+        2'd2: font4x4_row = 4'b1100;
+        default: font4x4_row = 4'b1010;
+      endcase
+      "L": case (row)
+        2'd0: font4x4_row = 4'b1000;
+        2'd1: font4x4_row = 4'b1000;
+        2'd2: font4x4_row = 4'b1000;
+        default: font4x4_row = 4'b1111;
+      endcase
+      "M": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1111;
+        2'd2: font4x4_row = 4'b1111;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "N": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1101;
+        2'd2: font4x4_row = 4'b1011;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "O": case (row)
+        2'd0: font4x4_row = 4'b0110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1001;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "P": case (row)
+        2'd0: font4x4_row = 4'b1110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1110;
+        default: font4x4_row = 4'b1000;
+      endcase
+      "Q": case (row)
+        2'd0: font4x4_row = 4'b0110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1011;
+        default: font4x4_row = 4'b0111;
+      endcase
+      "R": case (row)
+        2'd0: font4x4_row = 4'b1110;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1110;
+        default: font4x4_row = 4'b1010;
+      endcase
+      "S": case (row)
+        2'd0: font4x4_row = 4'b0111;
+        2'd1: font4x4_row = 4'b0110;
+        2'd2: font4x4_row = 4'b0001;
+        default: font4x4_row = 4'b1110;
+      endcase
+      "T": case (row)
+        2'd0: font4x4_row = 4'b1111;
+        2'd1: font4x4_row = 4'b0110;
+        2'd2: font4x4_row = 4'b0110;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "U": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b1001;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "V": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1001;
+        2'd2: font4x4_row = 4'b0110;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "W": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b1111;
+        2'd2: font4x4_row = 4'b1111;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "X": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b0110;
+        2'd2: font4x4_row = 4'b0110;
+        default: font4x4_row = 4'b1001;
+      endcase
+      "Y": case (row)
+        2'd0: font4x4_row = 4'b1001;
+        2'd1: font4x4_row = 4'b0110;
+        2'd2: font4x4_row = 4'b0110;
+        default: font4x4_row = 4'b0110;
+      endcase
+      "Z": case (row)
+        2'd0: font4x4_row = 4'b1111;
+        2'd1: font4x4_row = 4'b0010;
+        2'd2: font4x4_row = 4'b0100;
+        default: font4x4_row = 4'b1111;
+      endcase
+      default: font4x4_row = 4'b0000;
+    endcase
+  end
+endfunction
 
 wire [9:0] rect_half =
   (rect_size_sel == 2'd0) ? 10'd60 :
@@ -91,9 +259,38 @@ wire rect_edge =
 wire draw_border = rect_inside && rect_edge;
 wire [3:0] bw_level = bw_pixel ? 4'hF : 4'h0;
 
-assign vga_R = inDisplayArea ? (draw_border ? 4'hF : bw_level) : 4'h0;
-assign vga_G = inDisplayArea ? (draw_border ? 4'h0 : bw_level) : 4'h0;
-assign vga_B = inDisplayArea ? (draw_border ? 4'h0 : bw_level) : 4'h0;
+wire [9:0] text_x0 = rect_left + TEXT_X_OFF;
+wire [8:0] text_y0 = rect_top + TEXT_Y_OFF;
+wire text_in_bounds =
+  (CounterX >= text_x0) && (CounterX < (text_x0 + 10'd24)) &&
+  (CounterY >= text_y0) && (CounterY < (text_y0 + 9'd4));
+wire [9:0] text_rel_x = CounterX - text_x0;
+wire [1:0] text_rel_y = CounterY - text_y0;
+wire [2:0] text_char_idx =
+  (text_rel_x < 10'd5)  ? 3'd0 :
+  (text_rel_x < 10'd10) ? 3'd1 :
+  (text_rel_x < 10'd15) ? 3'd2 :
+  (text_rel_x < 10'd20) ? 3'd3 :
+                         3'd4;
+wire [2:0] text_x_in_cell =
+  (text_char_idx == 3'd0) ? text_rel_x[2:0] :
+  (text_char_idx == 3'd1) ? (text_rel_x - 10'd5) :
+  (text_char_idx == 3'd2) ? (text_rel_x - 10'd10) :
+  (text_char_idx == 3'd3) ? (text_rel_x - 10'd15) :
+                            (text_rel_x - 10'd20);
+wire text_on_glyph_col = (text_x_in_cell < 3'd4);
+wire [7:0] text_char =
+  (text_char_idx == 3'd0) ? "H" :
+  (text_char_idx == 3'd1) ? "E" :
+  (text_char_idx == 3'd2) ? "L" :
+  (text_char_idx == 3'd3) ? "L" :
+                           "O";
+wire [3:0] text_row_bits = font4x4_row(text_char, text_rel_y);
+wire text_pixel = text_in_bounds && text_on_glyph_col && text_row_bits[3 - text_x_in_cell[1:0]];
+
+assign vga_R = inDisplayArea ? (draw_border ? 4'hF : (text_pixel ? 4'h0 : bw_level)) : 4'h0;
+assign vga_G = inDisplayArea ? (draw_border ? 4'h0 : (text_pixel ? 4'hF : bw_level)) : 4'h0;
+assign vga_B = inDisplayArea ? (draw_border ? 4'h0 : (text_pixel ? 4'h0 : bw_level)) : 4'h0;
 
 wire [7:0] xin = CounterX[9:2];
 wire [7:0] yin = 8'd255 - CounterY[8:1];
