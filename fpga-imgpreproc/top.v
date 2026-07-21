@@ -54,7 +54,7 @@ assign vga_G = inDisplayArea? pixin[7:4]:0;
 assign vga_B = inDisplayArea? pixin[3:0]:0;
 
 wire [7:0] xin = CounterX[9:2];
-wire [7:0] yin = CounterY[8:1];
+wire [7:0] yin = 8'd255 - CounterY[8:1];
 
 wire [15:0] raddr = { yin, xin };
 wire [15:0] waddr = { yout, xout };
