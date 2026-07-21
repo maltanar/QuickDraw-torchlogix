@@ -1,3 +1,4 @@
+
 module top
 (
   input clk,
@@ -49,9 +50,15 @@ wire [7:0] xout;
 wire [7:0] yout;
 reg we;
 
-assign vga_R = inDisplayArea? pixin[11:8]:0;
-assign vga_G = inDisplayArea? pixin[7:4]:0;
-assign vga_B = inDisplayArea? pixin[3:0]:0;
+wire [3:0] cam_R = pixin[11:8];
+wire [3:0] cam_G = pixin[7:4];
+wire [3:0] cam_B = pixin[3:0];
+// 4-bit grayscale conversion using weighted average
+//wire [3:0] cam_Y = ((cam_R * 5) + (cam_G * 9) + (cam_B * 2)) >> 4;
+
+assign vga_R = inDisplayArea? cam_R:0;
+assign vga_G = inDisplayArea? cam_G:0;
+assign vga_B = inDisplayArea? cam_B:0;
 
 wire [7:0] xin = CounterX[9:2];
 wire [7:0] yin = 8'd255 - CounterY[8:1];
