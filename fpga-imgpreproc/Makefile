@@ -2,6 +2,7 @@ TEST_CASE := ov7670
 YOSYS_PARAM := -nomx8
 VERILOG_FILES := \
     top.v \
+    ../fpga/uart.v \
 	camera_configure.v \
     camera_read.v \
     hvsync_generator.v \
