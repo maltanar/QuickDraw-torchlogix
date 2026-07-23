@@ -311,7 +311,7 @@ vgabuff vgab (
 wire [15:0] pixel_data;
 wire [9:0] row, col;
 
-assign yout = 255 - row[8:1] + 31;
+assign yout = 255 - row[8:1] + 64;
 assign xout = 150 - col[9:2];
 
 assign pixout = pixel_data;
