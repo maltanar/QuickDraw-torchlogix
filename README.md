@@ -89,7 +89,7 @@ quickdraw-logic-train --dataset mnist --load_checkpoint Checkpoints/model_logic.
 Instantiate a dense-only logic topology by passing an empty conv stage list and keeping the dense widths large enough for torchlogix connection coverage:
 
 ```bash
-quickdraw-logic-train --dataset quickdraw --conv_channels "" --dense_dims 4000,4000 --input_binarization none --ngpu 0 -e 10
+quickdraw-logic-train --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --dataset quickdraw --conv_channels "" --dense_dims 4000,4000 --input_binarization none --ngpu 0 -e 10
 ```
 
 If you want to sweep dense-only candidates, include an empty entry in the conv grid:
