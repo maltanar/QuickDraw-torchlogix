@@ -31,7 +31,8 @@ from PyQt6.QtCore import Qt, QPoint, QTimer, QObject, QThread, pyqtSignal
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
-CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+#CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+CLASSES = ["smiley_face", "eye", "tree", "airplane", "bicycle", "apple", "eyeglasses", "book", "cell_phone", "car"]
 
 
 def to_signed32(value):

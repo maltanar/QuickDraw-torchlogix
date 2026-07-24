@@ -78,7 +78,7 @@ do_build() {
         read_verilog \
             $SCRIPT_DIR/uart.v \
             $SCRIPT_DIR/${TOP}.v \
-            $VERILOG_DIR/mlp_quickdraw_4k_4k.v;
+            $VERILOG_DIR/mlp_quickdraw_1k_rank4_learnable.v;
         chparam -set CLK_FREQ  $CLK_FREQ  ${TOP};
         chparam -set BAUD_RATE $BAUD_RATE ${TOP};
         synth_gatemate -top ${TOP} -luttree -nomx8 -nomult;
