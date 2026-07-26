@@ -31,7 +31,39 @@ from PyQt6.QtCore import Qt, QPoint, QTimer, QObject, QThread, pyqtSignal
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
-CLASSES = ["bicycle", "eyeglasses", "car", "eye", "tree", "apple", "smiley_face", "cell_phone", "airplane", "book"]
+DEFAULT_CLASSES = [
+    "bicycle",
+    "eyeglasses",
+    "car",
+    "eye",
+    "tree",
+    "apple",
+    "smiley_face",
+    "cell_phone",
+    "airplane",
+    "book",
+]
+
+
+def load_class_names(class_names_path: Path) -> list[str]:
+    classes: list[str] = []
+    try:
+        with class_names_path.open("r", encoding="utf-8") as f:
+            for raw_line in f:
+                line = raw_line.strip()
+                if not line:
+                    continue
+                if line.startswith("class name:"):
+                    # Format: class name: <name>\t\tnumber of samples: <n>
+                    class_part = line.split("class name:", 1)[1]
+                    class_name = class_part.split("number of samples:", 1)[0].strip()
+                    if class_name:
+                        classes.append(class_name)
+        if len(classes) == 10:
+            return classes
+    except OSError:
+        pass
+    return DEFAULT_CLASSES
 
 
 def to_signed32(value):
@@ -53,9 +85,10 @@ def pack_binary_image_to_inp(gray_1x1x28x28, threshold=0.5):
 def unpack_scores(scores_flat):
     scores = []
     for i in range(10):
-        raw = (scores_flat >> (32 * i)) & 0xFFFFFFFF
+        raw = (scores_flat >> (6 * i)) & 0x0000003f
         scores.append(to_signed32(raw))
-    return np.array(scores, dtype=np.float32)
+    ret = np.array(scores, dtype=np.float32)
+    return ret
 
 
 class VerilatorLoadWorker(QObject):
@@ -194,7 +227,10 @@ class MainWindow(QMainWindow):
         project_root = Path(__file__).resolve().parents[1]
         self.verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
         self.verilated_cache_root = project_root / "verilated"
-        self.top_module_name = "circuit"
+        self.top_module_name = "neuralut"
+        neuralut_root = project_root.parent / "NeuraLUT"
+        self.class_names_path = neuralut_root / "datasets" / "quickdraw_10class" / "verilog" / "class_names.txt"
+        self.classes = load_class_names(self.class_names_path)
         self.sim = None
 
         # Central widget
@@ -609,11 +645,11 @@ class MainWindow(QMainWindow):
 
     def init_plot(self):
         self.ax.clear()
-        self.bars = self.ax.barh(CLASSES, np.zeros(10), color='skyblue')
+        self.bars = self.ax.barh(self.classes, np.zeros(10), color='skyblue')
         self.ax.set_xlim(0, 1)
         self.ax.set_xlabel('Probability')
         self.ax.set_title('Live Prediction')
-        self.ax.invert_yaxis()  # to match the order in CLASSES from top to bottom
+        self.ax.invert_yaxis()  # top-to-bottom matches class index order
         self.figure.tight_layout()
         self.canvas.draw()
         
@@ -626,8 +662,18 @@ class MainWindow(QMainWindow):
                 if self.sim is None:
                     logits = np.zeros(10)
                 else:
-                    self.sim.io.inp = inp_value
-                    logits = unpack_scores(int(self.sim.io.scores_flat))
+                    self.sim.io.rst = 0
+                    self.sim.io.clk = 0
+                    self.sim.io.rst = 1
+                    for i in range(10):
+                        self.sim.io.clk = 1
+                        self.sim.io.clk = 0
+                    self.sim.io.rst = 0
+                    self.sim.io.M0 = inp_value
+                    for i in range(10):
+                        self.sim.io.clk = 1
+                        self.sim.io.clk = 0
+                    logits = unpack_scores(int(self.sim.io.M6))
             else:  # fpga
                 if self.fpga_uart is None or not self.fpga_uart.is_open():
                     logits = np.zeros(10)
