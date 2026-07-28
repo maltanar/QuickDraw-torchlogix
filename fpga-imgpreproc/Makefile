@@ -3,6 +3,13 @@ YOSYS_PARAM := -nomx8
 VERILOG_FILES := \
     top.v \
     ../fpga/uart.v \
+    camera_axis_source.v \
+    threshold_stream.v \
+    capture_buffer.v \
+    capture_reader.v \
+    renderer.v \
+    vga_scanout.v \
+    control_uart.v \
 	camera_configure.v \
     camera_read.v \
     hvsync_generator.v \

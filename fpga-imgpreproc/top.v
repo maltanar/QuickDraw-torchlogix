@@ -1,4 +1,3 @@
-
 module top
 (
   input clk,
@@ -24,476 +23,193 @@ module top
 
 wire clk_25MHz;
 
-pll pll_i(
-	.clock_in(clk),             // 10 MHz input
-  .clock_out(clk_25MHz)       // 25 MHz output 
+pll pll_i (
+  .clock_in(clk),
+  .clock_out(clk_25MHz)
 );
 
-// You do not need to connect PWON and RESET pins, but if you do you need this
-assign cam_PWON = 1'b0;  // constant camera Power ON
-assign cam_RESET = 1'b1; // camera reset to HIGH
+assign cam_PWON = 1'b0;
+assign cam_RESET = 1'b1;
+assign cam_XCLK = clk_25MHz;
 
-wire inDisplayArea;
-wire [9:0] CounterX;
-wire [8:0] CounterY;
-wire frame_done;
+reg [5:0] reset_cnt = 0;
+wire resetn = (&reset_cnt) & btn;
 
-hvsync_generator hvsync_gen(
-  .clk(clk_25MHz), //Input
-  .vga_h_sync(vga_hsync), //Output
-  .vga_v_sync(vga_vsync),//Output
-  .inDisplayArea(inDisplayArea), //Output
-  .CounterX(CounterX), //Output
-  .CounterY(CounterY) //Output
-);
-
-wire [11:0] pixin;
-wire [15:0] pixout;
-wire [7:0] xout;
-wire [7:0] yout;
-reg we;
-
-wire [3:0] cam_R = pixin[11:8];
-wire [3:0] cam_G = pixin[7:4];
-wire [3:0] cam_B = pixin[3:0];
-// 4-bit grayscale conversion using weighted average
-wire [3:0] cam_Y = ((cam_R * 5) + (cam_G * 9) + (cam_B * 2)) >> 4;
-wire bw_pixel = (cam_Y < bw_threshold);
-
-localparam [9:0] VGA_W = 10'd640;
-localparam [8:0] VGA_H = 9'd480;
-localparam [9:0] BORDER_THICK = 10'd2;
-localparam [9:0] MOVE_STEP_X = 10'd4;
-localparam [8:0] MOVE_STEP_Y = 9'd4;
-localparam [9:0] TEXT_X_OFF = 10'd6;
-localparam [8:0] TEXT_Y_OFF = 9'd6;
-
-function [3:0] font4x4_row;
-  input [7:0] ch;
-  input [1:0] row;
-  begin
-    case (ch)
-      "A": case (row)
-        2'd0: font4x4_row = 4'b0110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1111;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "B": case (row)
-        2'd0: font4x4_row = 4'b1110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1110;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "C": case (row)
-        2'd0: font4x4_row = 4'b0111;
-        2'd1: font4x4_row = 4'b1000;
-        2'd2: font4x4_row = 4'b1000;
-        default: font4x4_row = 4'b0111;
-      endcase
-      "D": case (row)
-        2'd0: font4x4_row = 4'b1110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1001;
-        default: font4x4_row = 4'b1110;
-      endcase
-      "E": case (row)
-        2'd0: font4x4_row = 4'b1111;
-        2'd1: font4x4_row = 4'b1110;
-        2'd2: font4x4_row = 4'b1000;
-        default: font4x4_row = 4'b1111;
-      endcase
-      "F": case (row)
-        2'd0: font4x4_row = 4'b1111;
-        2'd1: font4x4_row = 4'b1110;
-        2'd2: font4x4_row = 4'b1000;
-        default: font4x4_row = 4'b1000;
-      endcase
-      "G": case (row)
-        2'd0: font4x4_row = 4'b0111;
-        2'd1: font4x4_row = 4'b1000;
-        2'd2: font4x4_row = 4'b1011;
-        default: font4x4_row = 4'b0111;
-      endcase
-      "H": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1111;
-        2'd2: font4x4_row = 4'b1001;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "I": case (row)
-        2'd0: font4x4_row = 4'b1111;
-        2'd1: font4x4_row = 4'b0110;
-        2'd2: font4x4_row = 4'b0110;
-        default: font4x4_row = 4'b1111;
-      endcase
-      "J": case (row)
-        2'd0: font4x4_row = 4'b0011;
-        2'd1: font4x4_row = 4'b0001;
-        2'd2: font4x4_row = 4'b1001;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "K": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1010;
-        2'd2: font4x4_row = 4'b1100;
-        default: font4x4_row = 4'b1010;
-      endcase
-      "L": case (row)
-        2'd0: font4x4_row = 4'b1000;
-        2'd1: font4x4_row = 4'b1000;
-        2'd2: font4x4_row = 4'b1000;
-        default: font4x4_row = 4'b1111;
-      endcase
-      "M": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1111;
-        2'd2: font4x4_row = 4'b1111;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "N": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1101;
-        2'd2: font4x4_row = 4'b1011;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "O": case (row)
-        2'd0: font4x4_row = 4'b0110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1001;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "P": case (row)
-        2'd0: font4x4_row = 4'b1110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1110;
-        default: font4x4_row = 4'b1000;
-      endcase
-      "Q": case (row)
-        2'd0: font4x4_row = 4'b0110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1011;
-        default: font4x4_row = 4'b0111;
-      endcase
-      "R": case (row)
-        2'd0: font4x4_row = 4'b1110;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1110;
-        default: font4x4_row = 4'b1010;
-      endcase
-      "S": case (row)
-        2'd0: font4x4_row = 4'b0111;
-        2'd1: font4x4_row = 4'b0110;
-        2'd2: font4x4_row = 4'b0001;
-        default: font4x4_row = 4'b1110;
-      endcase
-      "T": case (row)
-        2'd0: font4x4_row = 4'b1111;
-        2'd1: font4x4_row = 4'b0110;
-        2'd2: font4x4_row = 4'b0110;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "U": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b1001;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "V": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1001;
-        2'd2: font4x4_row = 4'b0110;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "W": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b1111;
-        2'd2: font4x4_row = 4'b1111;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "X": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b0110;
-        2'd2: font4x4_row = 4'b0110;
-        default: font4x4_row = 4'b1001;
-      endcase
-      "Y": case (row)
-        2'd0: font4x4_row = 4'b1001;
-        2'd1: font4x4_row = 4'b0110;
-        2'd2: font4x4_row = 4'b0110;
-        default: font4x4_row = 4'b0110;
-      endcase
-      "Z": case (row)
-        2'd0: font4x4_row = 4'b1111;
-        2'd1: font4x4_row = 4'b0010;
-        2'd2: font4x4_row = 4'b0100;
-        default: font4x4_row = 4'b1111;
-      endcase
-      default: font4x4_row = 4'b0000;
-    endcase
-  end
-endfunction
-
-wire [9:0] rect_half =
-  (rect_size_sel == 2'd0) ? 10'd60 :
-  (rect_size_sel == 2'd1) ? 10'd120 :
-                           10'd240;
-wire [9:0] rect_cx_min = rect_half;
-wire [9:0] rect_cx_max = VGA_W - rect_half;
-wire [8:0] rect_cy_min = rect_half[8:0];
-wire [8:0] rect_cy_max = VGA_H - rect_half[8:0];
-
-wire [9:0] rect_left = rect_cx - rect_half;
-wire [9:0] rect_right = rect_cx + rect_half - 10'd1;
-wire [8:0] rect_top = rect_cy - rect_half[8:0];
-wire [8:0] rect_bottom = rect_cy + rect_half[8:0] - 9'd1;
-
-wire rect_inside =
-  (CounterX >= rect_left) && (CounterX <= rect_right) &&
-  (CounterY >= rect_top) && (CounterY <= rect_bottom);
-wire rect_edge =
-  (CounterX < (rect_left + BORDER_THICK)) ||
-  (CounterX > (rect_right - BORDER_THICK)) ||
-  (CounterY < (rect_top + BORDER_THICK[8:0])) ||
-  (CounterY > (rect_bottom - BORDER_THICK[8:0]));
-wire draw_border = rect_inside && rect_edge;
-wire [3:0] bw_level = bw_pixel ? 4'hF : 4'h0;
-
-wire [9:0] text_x0 = rect_left + TEXT_X_OFF;
-wire [8:0] text_y0 = rect_top + TEXT_Y_OFF;
-wire text_in_bounds =
-  (CounterX >= text_x0) && (CounterX < (text_x0 + 10'd24)) &&
-  (CounterY >= text_y0) && (CounterY < (text_y0 + 9'd4));
-wire [9:0] text_rel_x = CounterX - text_x0;
-wire [1:0] text_rel_y = CounterY - text_y0;
-wire [2:0] text_char_idx =
-  (text_rel_x < 10'd5)  ? 3'd0 :
-  (text_rel_x < 10'd10) ? 3'd1 :
-  (text_rel_x < 10'd15) ? 3'd2 :
-  (text_rel_x < 10'd20) ? 3'd3 :
-                         3'd4;
-wire [2:0] text_x_in_cell =
-  (text_char_idx == 3'd0) ? text_rel_x[2:0] :
-  (text_char_idx == 3'd1) ? (text_rel_x - 10'd5) :
-  (text_char_idx == 3'd2) ? (text_rel_x - 10'd10) :
-  (text_char_idx == 3'd3) ? (text_rel_x - 10'd15) :
-                            (text_rel_x - 10'd20);
-wire text_on_glyph_col = (text_x_in_cell < 3'd4);
-wire [7:0] text_char =
-  (text_char_idx == 3'd0) ? "H" :
-  (text_char_idx == 3'd1) ? "E" :
-  (text_char_idx == 3'd2) ? "L" :
-  (text_char_idx == 3'd3) ? "L" :
-                           "O";
-wire [3:0] text_row_bits = font4x4_row(text_char, text_rel_y);
-wire text_pixel = text_in_bounds && text_on_glyph_col && text_row_bits[3 - text_x_in_cell[1:0]];
-
-assign vga_R = inDisplayArea ? (draw_border ? 4'hF : (text_pixel ? 4'h0 : bw_level)) : 4'h0;
-assign vga_G = inDisplayArea ? (draw_border ? 4'h0 : (text_pixel ? 4'hF : bw_level)) : 4'h0;
-assign vga_B = inDisplayArea ? (draw_border ? 4'h0 : (text_pixel ? 4'h0 : bw_level)) : 4'h0;
-
-wire [7:0] xin = CounterX[9:2];
-wire [7:0] yin = 8'd255 - CounterY[8:1];
-
-wire [15:0] raddr = { yin, xin };
-wire [15:0] waddr = { yout, xout };
-
-vgabuff vgab (
-        .clk(cam_PCLK), // Input
-        .raddr(raddr),   // Input
-        .pixin(pixin),  // Output
-        .we(we),        // Input
-        .waddr(waddr),  // Input
-        .rclk(clk_25MHz),
-        .pixout(pixout[11:0]) // Input
-        );
-
-wire [15:0] pixel_data;
-wire [9:0] row, col;
-
-assign yout = 255 - row[8:1] + 64;
-assign xout = 150 - col[9:2];
-
-assign pixout = pixel_data;
-
-assign cam_XCLK =  clk_25MHz;
-
-camera_read cam_read(
-    .clk(clk_25MHz),           // 25MHz INPUT
-    .x_clock(),                // OUTPUT
-    .p_clock(cam_PCLK),        // Input
-    .vsync(cam_VSYNC),         // Input
-    .href(cam_HREF),           // Input
-    .p_data(cam_data),         // Input
-    .pixel_data(pixel_data),   // Input
-    .pixel_valid(we),          // Input
-    .frame_done(frame_done),
-    .row(row),
-    .col(col)
-);
-
-  reg [5:0] reset_cnt = 0;
-  wire resetn = (&reset_cnt) & btn;
-
-	always @(posedge clk_25MHz) begin
-		reset_cnt <= reset_cnt + !resetn;
-	end
-
-wire [7:0] uart_rx_data;
-wire uart_rx_valid;
-wire uart_tx_busy;
-wire [7:0] uart_tx_din;
-wire uart_tx_wr;
-reg uart_send_active;
-reg [2:0] uart_msg_idx;
-reg [3:0] bw_threshold;
-reg [1:0] uart_esc_state;
-reg [1:0] rect_size_sel;
-reg [9:0] rect_cx;
-reg [8:0] rect_cy;
-
-assign uart_tx_din =
-  (uart_msg_idx == 3'd0) ? "H" :
-  (uart_msg_idx == 3'd1) ? "e" :
-  (uart_msg_idx == 3'd2) ? "l" :
-  (uart_msg_idx == 3'd3) ? "l" :
-                           "o";
-assign uart_tx_wr = uart_send_active && !uart_tx_busy;
-
-uart_rx #(
-  .CLK_FREQ(25000000),
-  .BAUD_RATE(115200)
-) uart_rx_i (
-  .clk(clk_25MHz),
-  .rst_n(resetn),
-  .rx(rx_i),
-  .data(uart_rx_data),
-  .valid(uart_rx_valid)
-);
-
-uart_tx #(
-  .CLK_FREQ(25000000),
-  .BAUD_RATE(115200)
-) uart_tx_i (
-  .clk(clk_25MHz),
-  .rst_n(resetn),
-  .din(uart_tx_din),
-  .wr(uart_tx_wr),
-  .busy(uart_tx_busy),
-  .tx(tx_o)
-);
-
-always @(posedge clk_25MHz or negedge resetn) begin
-  if (!resetn) begin
-    uart_send_active <= 1'b0;
-    uart_msg_idx <= 3'd0;
-    bw_threshold <= 4'd7;
-    uart_esc_state <= 2'd0;
-    rect_size_sel <= 2'd1;
-    rect_cx <= 10'd320;
-    rect_cy <= 9'd240;
-  end else begin
-    if (uart_rx_valid) begin
-      if (uart_esc_state == 2'd0) begin
-        if (uart_rx_data == 8'h1B) begin
-          uart_esc_state <= 2'd1;
-        end else if (uart_rx_data == 8'h2B) begin // '+' increases threshold
-          if (bw_threshold < 4'd15) begin
-            bw_threshold <= bw_threshold + 4'd1;
-          end
-        end else if (uart_rx_data == 8'h2D) begin // '-' decreases threshold
-          if (bw_threshold > 4'd0) begin
-            bw_threshold <= bw_threshold - 4'd1;
-          end
-        end else if ((uart_rx_data == 8'h53) || (uart_rx_data == 8'h73)) begin // 'S' or 's'
-          rect_size_sel <= 2'd0;
-          if (rect_cx < 10'd60) begin
-            rect_cx <= 10'd60;
-          end else if (rect_cx > 10'd580) begin
-            rect_cx <= 10'd580;
-          end
-          if (rect_cy < 9'd60) begin
-            rect_cy <= 9'd60;
-          end else if (rect_cy > 9'd420) begin
-            rect_cy <= 9'd420;
-          end
-        end else if ((uart_rx_data == 8'h4D) || (uart_rx_data == 8'h6D)) begin // 'M' or 'm'
-          rect_size_sel <= 2'd1;
-          if (rect_cx < 10'd120) begin
-            rect_cx <= 10'd120;
-          end else if (rect_cx > 10'd520) begin
-            rect_cx <= 10'd520;
-          end
-          if (rect_cy < 9'd120) begin
-            rect_cy <= 9'd120;
-          end else if (rect_cy > 9'd360) begin
-            rect_cy <= 9'd360;
-          end
-        end else if ((uart_rx_data == 8'h4C) || (uart_rx_data == 8'h6C)) begin // 'L' or 'l'
-          rect_size_sel <= 2'd2;
-          if (rect_cx < 10'd240) begin
-            rect_cx <= 10'd240;
-          end else if (rect_cx > 10'd400) begin
-            rect_cx <= 10'd400;
-          end
-          rect_cy <= 9'd240;
-        end else if ((uart_rx_data == 8'h3F) && !uart_send_active) begin
-          uart_send_active <= 1'b1;
-          uart_msg_idx <= 3'd0;
-        end
-      end else if (uart_esc_state == 2'd1) begin
-        if (uart_rx_data == 8'h5B) begin
-          uart_esc_state <= 2'd2;
-        end else begin
-          uart_esc_state <= 2'd0;
-        end
-      end else begin
-        uart_esc_state <= 2'd0;
-        if (uart_rx_data == 8'h41) begin // Up arrow
-          if (rect_cy > (rect_cy_min + MOVE_STEP_Y - 9'd1)) begin
-            rect_cy <= rect_cy - MOVE_STEP_Y;
-          end else begin
-            rect_cy <= rect_cy_min;
-          end
-        end else if (uart_rx_data == 8'h42) begin // Down arrow
-          if (rect_cy < (rect_cy_max - MOVE_STEP_Y + 9'd1)) begin
-            rect_cy <= rect_cy + MOVE_STEP_Y;
-          end else begin
-            rect_cy <= rect_cy_max;
-          end
-        end else if (uart_rx_data == 8'h43) begin // Right arrow
-          if (rect_cx < (rect_cx_max - MOVE_STEP_X + 10'd1)) begin
-            rect_cx <= rect_cx + MOVE_STEP_X;
-          end else begin
-            rect_cx <= rect_cx_max;
-          end
-        end else if (uart_rx_data == 8'h44) begin // Left arrow
-          if (rect_cx > (rect_cx_min + MOVE_STEP_X - 10'd1)) begin
-            rect_cx <= rect_cx - MOVE_STEP_X;
-          end else begin
-            rect_cx <= rect_cx_min;
-          end
-        end
-      end
-    end
-
-    if (uart_send_active && !uart_tx_busy) begin
-      if (uart_msg_idx == 3'd4) begin
-        uart_send_active <= 1'b0;
-      end else begin
-        uart_msg_idx <= uart_msg_idx + 3'd1;
-      end
-    end
-  end
+always @(posedge clk_25MHz) begin
+  reset_cnt <= reset_cnt + !resetn;
 end
+
+// ---------------------------------------------------------------------------
+// Control path: UART command decoder drives threshold/ROI/label controls.
+// ---------------------------------------------------------------------------
+wire threshold_wr;
+wire [3:0] threshold_wdata;
+wire [1:0] roi_size_sel;
+wire [9:0] roi_cx;
+wire [8:0] roi_cy;
+wire [3:0] label_idx;
+
+control_uart control_uart_i (
+  .clk(clk_25MHz),
+  .rst_n(resetn),
+  .rx_i(rx_i),
+  .tx_o(tx_o),
+  .threshold_wr(threshold_wr),
+  .threshold_wdata(threshold_wdata),
+  .roi_size_sel(roi_size_sel),
+  .roi_cx(roi_cx),
+  .roi_cy(roi_cy),
+  .label_idx(label_idx)
+);
+
+// ---------------------------------------------------------------------------
+// Datapath stage 1: camera feed -> AXI-like stream with frame TLAST.
+// ---------------------------------------------------------------------------
+wire cam_frame_done;
+wire cam_axis_valid;
+wire [11:0] cam_axis_rgb444;
+wire cam_axis_tlast;
+wire [7:0] cam_axis_x;
+wire [7:0] cam_axis_y;
+
+camera_axis_source camera_axis_source_i (
+  .cam_pclk(cam_PCLK),
+  .cam_vsync(cam_VSYNC),
+  .cam_href(cam_HREF),
+  .cam_data(cam_data),
+  .frame_done(cam_frame_done),
+  .tvalid(cam_axis_valid),
+  .tdata_rgb444(cam_axis_rgb444),
+  .tlast(cam_axis_tlast),
+  .pix_x(cam_axis_x),
+  .pix_y(cam_axis_y)
+);
+
+// ---------------------------------------------------------------------------
+// Datapath stage 2: thresholding with a writable threshold register.
+// ---------------------------------------------------------------------------
+wire [3:0] threshold_level;
+wire mono_axis_valid;
+wire mono_axis_pixel;
+wire mono_axis_tlast;
+wire [7:0] mono_axis_x;
+wire [7:0] mono_axis_y;
+
+threshold_stream threshold_stream_i (
+  .cfg_clk(clk_25MHz),
+  .cfg_rst_n(resetn),
+  .cfg_wr(threshold_wr),
+  .cfg_data(threshold_wdata),
+  .data_clk(cam_PCLK),
+  .data_rst_n(resetn),
+  .s_valid(cam_axis_valid),
+  .s_rgb444(cam_axis_rgb444),
+  .s_tlast(cam_axis_tlast),
+  .s_x(cam_axis_x),
+  .s_y(cam_axis_y),
+  .threshold_level(threshold_level),
+  .m_valid(mono_axis_valid),
+  .m_mono(mono_axis_pixel),
+  .m_tlast(mono_axis_tlast),
+  .m_x(mono_axis_x),
+  .m_y(mono_axis_y)
+);
+
+// ---------------------------------------------------------------------------
+// Datapath stage 3: capture buffer write (camera clock) and read (25 MHz).
+// ---------------------------------------------------------------------------
+wire cap_re;
+wire [15:0] cap_raddr;
+wire cap_rmono;
+
+capture_buffer capture_buffer_i (
+  .wclk(cam_PCLK),
+  .we(mono_axis_valid),
+  .waddr({mono_axis_y, mono_axis_x}),
+  .wmono(mono_axis_pixel),
+  .rclk(clk_25MHz),
+  .re(cap_re),
+  .raddr(cap_raddr),
+  .rmono(cap_rmono)
+);
+
+wire cap_stream_valid;
+wire cap_stream_tlast;
+wire cap_stream_mono;
+wire [7:0] cap_stream_x;
+wire [7:0] cap_stream_y;
+
+capture_reader capture_reader_i (
+  .clk(clk_25MHz),
+  .rst_n(resetn),
+  .cap_re(cap_re),
+  .cap_raddr(cap_raddr),
+  .cap_rmono(cap_rmono),
+  .m_valid(cap_stream_valid),
+  .m_tlast(cap_stream_tlast),
+  .m_mono(cap_stream_mono),
+  .m_x(cap_stream_x),
+  .m_y(cap_stream_y)
+);
+
+// ---------------------------------------------------------------------------
+// Datapath stage 4: renderer overlays ROI border + green label text.
+// ---------------------------------------------------------------------------
+wire vga_wr_en;
+wire [15:0] vga_wr_addr;
+wire [11:0] vga_wr_pixel;
+
+renderer renderer_i (
+  .clk(clk_25MHz),
+  .rst_n(resetn),
+  .s_valid(cap_stream_valid),
+  .s_mono(cap_stream_mono),
+  .s_tlast(cap_stream_tlast),
+  .s_x(cap_stream_x),
+  .s_y(cap_stream_y),
+  .roi_cx(roi_cx),
+  .roi_cy(roi_cy),
+  .roi_size_sel(roi_size_sel),
+  .label_idx(label_idx),
+  .m_we(vga_wr_en),
+  .m_waddr(vga_wr_addr),
+  .m_rgb444(vga_wr_pixel)
+);
+
+// ---------------------------------------------------------------------------
+// Datapath stage 5: VGA buffer + scanout.
+// ---------------------------------------------------------------------------
+wire [15:0] vga_rd_addr;
+wire [11:0] vga_rd_pixel;
+
+vgabuff vga_buffer_i (
+  .clk(clk_25MHz),
+  .raddr(vga_rd_addr),
+  .waddr(vga_wr_addr),
+  .we(vga_wr_en),
+  .pixout(vga_wr_pixel),
+  .rclk(clk_25MHz),
+  .pixin(vga_rd_pixel)
+);
+
+vga_scanout vga_scanout_i (
+  .clk_25mhz(clk_25MHz),
+  .pix_in(vga_rd_pixel),
+  .pix_addr(vga_rd_addr),
+  .vga_hsync(vga_hsync),
+  .vga_vsync(vga_vsync),
+  .vga_r(vga_R),
+  .vga_g(vga_G),
+  .vga_b(vga_B)
+);
 
 camera_configure cam_configure
 (
-    .clk(clk_25MHz),    // 25MHz
-    .start(!resetn),       // Input
-    .sioc(cam_SOIC),    // Output
-    .siod(cam_SOID),    // Output
-    .done()             // Output
+  .clk(clk_25MHz),
+  .start(!resetn),
+  .sioc(cam_SOIC),
+  .siod(cam_SOID),
+  .done()
 );
 
 endmodule
