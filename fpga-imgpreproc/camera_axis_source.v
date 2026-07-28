@@ -33,8 +33,10 @@ module camera_axis_source (
   assign tdata_rgb444 = pixel_data[11:0];
   assign tlast = frame_done;
 
-  // Preserve the legacy camera-to-logical-space mapping.
+  // note mirroring of the image in the x and y axes
+  // assuming camera looking down, camera top closest to user
+  // otherwise sketching in mirror mode can be awkward
   assign pix_y = (8'd255 - row[8:1]) + 8'd64;
-  assign pix_x = 8'd150 - col[9:2];
+  assign pix_x = 8'd120 - col[9:2];
 
 endmodule
