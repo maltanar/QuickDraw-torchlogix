@@ -3,8 +3,8 @@ fpga_uart.py – PC-side UART bridge for QuickDraw FPGA inference.
 
 Protocol (8N1, default 115200 baud):
   PC → FPGA : 98 bytes  = 784-bit binarised image (inp[783:0]), LSB first
-  FPGA → PC : 40 bytes  = 320-bit scores (scores_flat[319:0]), LSB first
-                           i.e. 10 × 32-bit signed integers
+  FPGA → PC : 8 bytes   = 64-bit scores (scores_flat[63:0]), LSB first
+                           i.e. 10 × 6-bit unsigned values packed into 64 bits
 
 Requires: pyserial  (pip install pyserial)
 """
@@ -17,7 +17,7 @@ class FPGAUARTInference:
 
     # Number of bytes in each direction
     _TX_BYTES = 98   # 784 bits / 8
-    _RX_BYTES = 40   # 320 bits / 8
+    _RX_BYTES = 8    # 64 bits / 8
 
     def __init__(self, port: str = "/dev/ttyACM0", baud: int = 115200,
                  timeout: float = 5.0):
@@ -76,7 +76,7 @@ class FPGAUARTInference:
         Returns
         -------
         int
-            320-bit integer (scores_flat[319:0]).
+            64-bit integer (scores_flat[63:0]).
             Use unpack_scores() from sketch_demo to extract per-class logits.
 
         Raises
@@ -100,7 +100,7 @@ class FPGAUARTInference:
         self.last_rx_bytes = response
         if len(response) < self._RX_BYTES:
             raise IOError(
-                f"UART timeout: expected {self._RX_BYTES} bytes from FPGA, "
+                f"UART timeout: expected {self._RX_BYTES} bytes (64 bits) from FPGA, "
                 f"got {len(response)}.  "
                 "Check that the bitfile is loaded and the baud rate matches."
             )

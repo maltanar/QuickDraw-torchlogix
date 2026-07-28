@@ -32,7 +32,6 @@ BOARD=${BOARD:-olimex_gatemateevb}  # openFPGALoader -b argument
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 VERILOG_DIR="$PROJECT_ROOT/verilog"
-NEURALUT_VERILOG_DIR="${NEURALUT_VERILOG_DIR:-$PROJECT_ROOT/../NeuraLUT/datasets/quickdraw_10class/verilog}"
 BUILD_DIR="$SCRIPT_DIR/build"
 LOG_DIR="$BUILD_DIR/logs"
 TOP="quickdraw_top"
@@ -63,23 +62,12 @@ do_build() {
     mkdir -p "$BUILD_DIR" "$LOG_DIR"
     cd "$BUILD_DIR"
 
-    [[ -d "$NEURALUT_VERILOG_DIR" ]] || die "NeuraLUT verilog dir not found: $NEURALUT_VERILOG_DIR"
-
     echo "================================================================"
     echo " QuickDraw GateMate build"
     echo "   CLK_FREQ  = $CLK_FREQ Hz"
     echo "   BAUD_RATE = $BAUD_RATE bps"
     echo "   FREQ_MHZ  = $FREQ_MHZ MHz  (P&R timing target)"
-    echo "   LNN SRC   = $NEURALUT_VERILOG_DIR"
     echo "================================================================"
-
-    # Consolidate NeuraLUT generated modules into one source file for yosys.
-    find "$NEURALUT_VERILOG_DIR" -maxdepth 1 -type f -name '*.v' -print0 \
-        | sort -z \
-        | while IFS= read -r -d '' vf; do
-            cat "$vf"
-            echo
-          done > neuralut_all.v
 
     # ------------------------------------------------------------------
     # Step 1: Synthesis with yosys
@@ -90,10 +78,10 @@ do_build() {
         read_verilog \
             $SCRIPT_DIR/uart.v \
             $SCRIPT_DIR/${TOP}.v \
-            neuralut_all.v;
+            $SCRIPT_DIR/../verilog/neuralut_lut4_79.54.v;
         chparam -set CLK_FREQ  $CLK_FREQ  ${TOP};
         chparam -set BAUD_RATE $BAUD_RATE ${TOP};
-        synth_gatemate -top ${TOP} -luttree;
+        synth_gatemate -top ${TOP} -luttree -nomx8;
         write_json ${TOP}.json
     "
     echo "      Synthesis log: $LOG_DIR/yosys.log"
@@ -174,7 +162,6 @@ case "${1:-build}" in
         echo "  BAUD_RATE=<n>     UART baud rate             (default: 115200)"
         echo "  CLK_FREQ=<n>      Board oscillator in Hz     (default: 10000000)"
         echo "  BOARD=<name>      openFPGALoader board name  (default: olimex_gatemateevb)"
-        echo "  NEURALUT_VERILOG_DIR=<path>  NeuraLUT verilog dir"
         exit 1
         ;;
 esac

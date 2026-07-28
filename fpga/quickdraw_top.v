@@ -2,11 +2,11 @@
 //
 // Protocol (8N1 UART, default 115200 baud):
 //   PC → FPGA : 98 bytes  (784 bits of binarized 28×28 image, LSB first)
-//   FPGA → PC : 40 bytes  (320 bits = 10 × 32-bit scores, LSB first)
+//   FPGA → PC : 8 bytes   (64 bits = 10 × 6-bit scores padded to 64 bits, LSB first)
 //
 // NeuraLUT ('neuralut') is pipelined and outputs 10 unsigned 6-bit class
-// scores (M6[59:0]). For host compatibility, each 6-bit score is zero-extended
-// into one 32-bit lane in scores_flat.
+// scores (M6[59:0]). For host compatibility, all 60 bits are zero-extended
+// into one 64-bit value in scores_flat.
 //
 // LED:  off during RECV, on during SEND (visual activity indicator)
 // BTN:  active-low manual reset (hold to reset state machine)
@@ -16,7 +16,7 @@
 module quickdraw_top #(
     parameter CLK_FREQ  = 10_000_000,   // Hz  – must match board oscillator
     parameter BAUD_RATE = 115200,       // bps – must match PC-side setting
-    parameter INFER_WAIT_CYCLES = 7     // cycles to allow NeuraLUT pipeline settle
+    parameter INFER_WAIT_CYCLES = 6     // cycles to allow NeuraLUT pipeline settle
 ) (
     input  wire clk_i,   // 10 MHz oscillator  (IO_SB_A8)
     input  wire but_i,   // button, active-low  (IO_SB_B7) – 0 = pressed = reset
@@ -57,19 +57,10 @@ module quickdraw_top #(
     // -----------------------------------------------------------------------
     reg  [783:0] inp_reg;
     wire [59:0]  lnn_scores;
-    wire [319:0] scores_flat;
+    wire [63:0]  scores_flat;
 
-    // Keep wire indexing explicit so lane ordering matches host expectations.
-    assign scores_flat[31:0]    = {26'd0, lnn_scores[5:0]};
-    assign scores_flat[63:32]   = {26'd0, lnn_scores[11:6]};
-    assign scores_flat[95:64]   = {26'd0, lnn_scores[17:12]};
-    assign scores_flat[127:96]  = {26'd0, lnn_scores[23:18]};
-    assign scores_flat[159:128] = {26'd0, lnn_scores[29:24]};
-    assign scores_flat[191:160] = {26'd0, lnn_scores[35:30]};
-    assign scores_flat[223:192] = {26'd0, lnn_scores[41:36]};
-    assign scores_flat[255:224] = {26'd0, lnn_scores[47:42]};
-    assign scores_flat[287:256] = {26'd0, lnn_scores[53:48]};
-    assign scores_flat[319:288] = {26'd0, lnn_scores[59:54]};
+    // Pack all 60 bits of scores into 64 bits (4 bits of padding).
+    assign scores_flat = {4'd0, lnn_scores[59:0]};
 
     neuralut u_neuralut (
         .M0  (inp_reg),
@@ -83,7 +74,7 @@ module quickdraw_top #(
     // -----------------------------------------------------------------------
     localparam S_RECV = 2'd0;   // receiving 98 bytes from PC
     localparam S_WAIT = 2'd1;   // waiting for NeuraLUT pipeline latency
-    localparam S_SEND = 2'd2;   // sending  40 bytes to PC
+    localparam S_SEND = 2'd2;   // sending  8 bytes to PC
 
     reg [1:0] state;
     reg [6:0] byte_cnt;   // 0..97 in RECV, 0..39 in SEND
@@ -131,7 +122,7 @@ module quickdraw_top #(
                     // tx_wr fires combinationally whenever !tx_busy;
                     // only advance byte_cnt / state after TX accepts the byte
                     if (~tx_busy) begin
-                        if (byte_cnt == 7'd39) begin
+                        if (byte_cnt == 7'd7) begin
                             // Last byte queued → wait for next image
                             state    <= S_RECV;
                             byte_cnt <= 7'd0;
