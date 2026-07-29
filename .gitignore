@@ -74,3 +74,8 @@ Data/*.npy
 codegen/
 fpga/build
 verilated/
+fpga/build.lut4/
+fpga/build.lut8/
+fpga-imgpreproc/build_sim_verilator/
+fpga-imgpreproc/build/
+fpga-imgpreproc/sim_trace.vcd
