@@ -2,7 +2,7 @@ TEST_CASE := ov7670
 YOSYS_PARAM := -nomx8
 VERILOG_FILES := \
     top.v \
-    ../fpga/uart.v \
+    uart.v \
     camera_axis_source.v \
     threshold_stream.v \
     capture_buffer.v \
