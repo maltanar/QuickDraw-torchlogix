@@ -34,15 +34,43 @@ module control_uart (
   wire uart_tx_wr;
 
   reg uart_send_active;
-  reg [2:0] uart_msg_idx;
+  reg [4:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
 
+  // Format: "T:X X:XXX Y:XXX S:X\n" (hex values, 20 bytes)
+  function [7:0] hex_char;
+    input [3:0] nibble;
+    begin
+      hex_char = (nibble < 4'd10) ? (8'h30 + {4'h0, nibble}) : (8'h37 + {4'h0, nibble});
+    end
+  endfunction
+
+  wire [7:0] tx_size_char =
+    (roi_size_sel == 2'd0) ? 8'h53 :  // 'S'
+    (roi_size_sel == 2'd1) ? 8'h4D :  // 'M'
+                             8'h4C;   // 'L'
+
   assign uart_tx_din =
-    (uart_msg_idx == 3'd0) ? "H" :
-    (uart_msg_idx == 3'd1) ? "e" :
-    (uart_msg_idx == 3'd2) ? "l" :
-    (uart_msg_idx == 3'd3) ? "l" :
-                             "o";
+    (uart_msg_idx == 5'd0)  ? 8'h54 :                          // 'T'
+    (uart_msg_idx == 5'd1)  ? 8'h3A :                          // ':'
+    (uart_msg_idx == 5'd2)  ? hex_char(threshold_wdata) :      // threshold hex
+    (uart_msg_idx == 5'd3)  ? 8'h20 :                          // ' '
+    (uart_msg_idx == 5'd4)  ? 8'h58 :                          // 'X'
+    (uart_msg_idx == 5'd5)  ? 8'h3A :                          // ':'
+    (uart_msg_idx == 5'd6)  ? hex_char({2'b00, roi_cx[9:8]}) : // cx high nibble
+    (uart_msg_idx == 5'd7)  ? hex_char(roi_cx[7:4]) :          // cx mid nibble
+    (uart_msg_idx == 5'd8)  ? hex_char(roi_cx[3:0]) :          // cx low nibble
+    (uart_msg_idx == 5'd9)  ? 8'h20 :                          // ' '
+    (uart_msg_idx == 5'd10) ? 8'h59 :                          // 'Y'
+    (uart_msg_idx == 5'd11) ? 8'h3A :                          // ':'
+    (uart_msg_idx == 5'd12) ? hex_char({3'b000, roi_cy[8]}) :  // cy high nibble
+    (uart_msg_idx == 5'd13) ? hex_char(roi_cy[7:4]) :          // cy mid nibble
+    (uart_msg_idx == 5'd14) ? hex_char(roi_cy[3:0]) :          // cy low nibble
+    (uart_msg_idx == 5'd15) ? 8'h20 :                          // ' '
+    (uart_msg_idx == 5'd16) ? 8'h53 :                          // 'S'
+    (uart_msg_idx == 5'd17) ? 8'h3A :                          // ':'
+    (uart_msg_idx == 5'd18) ? tx_size_char :                   // size char
+                              8'h0A;                           // '\n'
 
   assign uart_tx_wr = uart_send_active && !uart_tx_busy;
 
@@ -72,13 +100,13 @@ module control_uart (
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       uart_send_active <= 1'b0;
-      uart_msg_idx <= 3'd0;
+      uart_msg_idx <= 5'd0;
       threshold_wr <= 1'b0;
       threshold_wdata <= 4'd7;
       uart_esc_state <= 2'd0;
       roi_size_sel <= 2'd1;
-      roi_cx <= 10'd320;
-      roi_cy <= 9'd240;
+      roi_cx <= 10'd120;
+      roi_cy <= 9'd120;
       label_idx <= 4'd0;
     end else begin
       threshold_wr <= 1'b0;
@@ -91,18 +119,38 @@ module control_uart (
             if (threshold_wdata < 4'd15) begin
               threshold_wdata <= threshold_wdata + 4'd1;
               threshold_wr <= 1'b1;
+              if (!uart_send_active) begin
+                uart_send_active <= 1'b1;
+                uart_msg_idx <= 5'd0;
+              end
             end
           end else if (uart_rx_data == 8'h2D) begin
             if (threshold_wdata > 4'd0) begin
               threshold_wdata <= threshold_wdata - 4'd1;
               threshold_wr <= 1'b1;
+              if (!uart_send_active) begin
+                uart_send_active <= 1'b1;
+                uart_msg_idx <= 5'd0;
+              end
             end
           end else if ((uart_rx_data == 8'h53) || (uart_rx_data == 8'h73)) begin
             roi_size_sel <= 2'd0;
+            if (!uart_send_active) begin
+              uart_send_active <= 1'b1;
+              uart_msg_idx <= 5'd0;
+            end
           end else if ((uart_rx_data == 8'h4D) || (uart_rx_data == 8'h6D)) begin
             roi_size_sel <= 2'd1;
+            if (!uart_send_active) begin
+              uart_send_active <= 1'b1;
+              uart_msg_idx <= 5'd0;
+            end
           end else if ((uart_rx_data == 8'h4C) || (uart_rx_data == 8'h6C)) begin
             roi_size_sel <= 2'd2;
+            if (!uart_send_active) begin
+              uart_send_active <= 1'b1;
+              uart_msg_idx <= 5'd0;
+            end
           end else if ((uart_rx_data >= 8'h30) && (uart_rx_data <= 8'h39)) begin
             label_idx <= uart_rx_data - 8'h30;
           end else if ((uart_rx_data >= 8'h41) && (uart_rx_data <= 8'h46)) begin
@@ -111,7 +159,7 @@ module control_uart (
             label_idx <= uart_rx_data - 8'h57;
           end else if ((uart_rx_data == 8'h3F) && !uart_send_active) begin
             uart_send_active <= 1'b1;
-            uart_msg_idx <= 3'd0;
+            uart_msg_idx <= 5'd0;
           end
         end else if (uart_esc_state == 2'd1) begin
           if (uart_rx_data == 8'h5B) begin
@@ -146,6 +194,10 @@ module control_uart (
               roi_cx <= rect_cx_min;
             end
           end
+          if (!uart_send_active) begin
+            uart_send_active <= 1'b1;
+            uart_msg_idx <= 5'd0;
+          end
         end
       end
 
@@ -162,10 +214,10 @@ module control_uart (
       end
 
       if (uart_send_active && !uart_tx_busy) begin
-        if (uart_msg_idx == 3'd4) begin
+        if (uart_msg_idx == 5'd19) begin
           uart_send_active <= 1'b0;
         end else begin
-          uart_msg_idx <= uart_msg_idx + 3'd1;
+          uart_msg_idx <= uart_msg_idx + 5'd1;
         end
       end
     end
