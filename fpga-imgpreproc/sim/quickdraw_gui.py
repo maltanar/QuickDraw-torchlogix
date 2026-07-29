@@ -455,18 +455,23 @@ class SimulatorWorker(QThread):
     def run(self):
         """Run simulation loop"""
         try:
-            from sim_verilator import create_simulator
-            
+            try:
+                from sim_ctypes import create_simulator
+                print("Using fast C++ backend (sim_ctypes)")
+            except Exception as e:
+                print(f"C++ backend unavailable ({e}), falling back to Python backend")
+                from sim_verilator import create_simulator
+
             # Create simulator with optional VCD tracing
             self.simulator = create_simulator(
                 hdl_path=Path(__file__).parent,
                 enable_vcd_trace=self.enable_vcd_trace,
                 vcd_file="sim_trace.vcd"
             )
-            
+
             self.running = True
             frame_count = 0
-            
+
             while self.running:
                 # Get camera frame from canvas and queue it for streaming
                 camera_frame = self.camera_canvas.get_image_array()
