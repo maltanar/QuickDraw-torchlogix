@@ -236,7 +236,7 @@ static void drive_uart_rx(Sim* s) {
             for (int i = 0; i < 8; i++) s->rx_bits[1 + i] = (byte >> i) & 1;
             s->rx_bits[9] = s->rx_bits[10] = 1;  // stop bits
             s->rx_bit_idx   = 0;
-            s->rx_countdown = BAUD_CYCLES / 2;
+            s->rx_countdown = BAUD_CYCLES;
             s->rx_state     = RX_SENDING;
             s->top->rx_i    = s->rx_bits[0];
         }
