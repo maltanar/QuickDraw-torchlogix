@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QFrame, QSplitter, QCheckBox, QSlider
 )
 from PyQt6.QtGui import (
-    QImage, QPixmap, QPainter, QPen, QBrush, QColor, QFont
+    QImage, QPixmap, QPainter, QPen, QBrush, QColor, QFont, QTextCursor
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, QRect, pyqtSignal, QObject, QThread
 from PyQt6.QtWidgets import QScrollArea
@@ -186,14 +186,15 @@ class UARTTerminal(QTextEdit):
     
     def add_output(self, text, color="black"):
         """Add output text"""
-        #self.moveCursor(self.document().end())
+        self.moveCursor(QTextCursor.MoveOperation.End)
         
         format = self.currentCharFormat()
         format.setForeground(QColor(color))
         self.setCurrentCharFormat(format)
         
         self.insertPlainText(text)
-        #self.moveCursor(self.document().end())
+        self.moveCursor(QTextCursor.MoveOperation.End)
+        self.ensureCursorVisible()
     
     def add_command(self, cmd):
         """Add command to queue"""
@@ -208,7 +209,7 @@ class QuickDrawSimulator(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("QuickDraw FPGA Simulator")
-        self.setGeometry(100, 100, 700, 700)
+        self.setGeometry(100, 100, 770, 700)
         
         # Create central widget
         central = QWidget()
@@ -290,7 +291,14 @@ class QuickDrawSimulator(QMainWindow):
         scale_row.addStretch()
         right_layout.addLayout(scale_row)
         
-        right_layout.addWidget(QLabel("UART Control"))
+        uart_header_row = QHBoxLayout()
+        uart_header_row.addWidget(QLabel("UART Control"))
+        uart_header_row.addStretch()
+        self.clear_uart_btn = QPushButton("Clear Log")
+        self.clear_uart_btn.clicked.connect(self._clear_uart_log)
+        uart_header_row.addWidget(self.clear_uart_btn)
+        right_layout.addLayout(uart_header_row)
+
         self.uart_terminal = UARTTerminal()
         right_layout.addWidget(self.uart_terminal)
 
@@ -328,6 +336,15 @@ class QuickDrawSimulator(QMainWindow):
         cmd_grid.addWidget(_btn("?", '?', "Status"), 1, 8)
 
         right_layout.addLayout(cmd_grid)
+
+        # Freeform UART input (send on Enter)
+        uart_input_row = QHBoxLayout()
+        uart_input_row.addWidget(QLabel("UART TX:"))
+        self.uart_input = QLineEdit()
+        self.uart_input.setPlaceholderText("Type text/escape sequence and press Enter")
+        self.uart_input.returnPressed.connect(self._on_uart_text_entered)
+        uart_input_row.addWidget(self.uart_input)
+        right_layout.addLayout(uart_input_row)
         
         # Counters and status
         right_layout.addWidget(QLabel("Status"))
@@ -364,8 +381,38 @@ class QuickDrawSimulator(QMainWindow):
     def _send_uart_cmd(self, cmd):
         """Send a UART command string"""
         self.uart_queue.put(cmd)
-        display = repr(cmd) if len(cmd) > 1 else repr(cmd)
-        self.uart_terminal.add_output(f"[cmd] {display}\n", "blue")
+        self.uart_terminal.add_output("[cmd] ", "blue")
+        self.uart_terminal.add_output(cmd, "blue")
+        self.uart_terminal.add_output("\n", "blue")
+
+    def _on_uart_text_entered(self):
+        """Send freeform UART text when Enter is pressed"""
+        text = self.uart_input.text()
+        if text:
+            decoded_text = self._decode_uart_escapes(text)
+            self._send_uart_cmd(decoded_text)
+            self.uart_input.clear()
+
+    def _clear_uart_log(self):
+        """Clear UART log display"""
+        self.uart_terminal.clear()
+
+    def _decode_uart_escapes(self, text):
+        """Decode common escaped sequences entered in the UART text field.
+
+        Examples: \\n, \\r, \\t, \\x1b
+        """
+        try:
+            return bytes(text, "utf-8").decode("unicode_escape")
+        except Exception:
+            return text
+
+    def _decode_uart_output_escapes(self, text):
+        """Decode escaped UART output like '\\x0a' into actual characters."""
+        try:
+            return bytes(text, "utf-8").decode("unicode_escape")
+        except Exception:
+            return text
     
     def _on_scale_changed(self, value):
         self.scale_label.setText(f"{value}x")
@@ -422,7 +469,7 @@ class QuickDrawSimulator(QMainWindow):
     
     def on_uart_output(self, output):
         """Receive UART output"""
-        self.uart_terminal.add_output(output, "red")
+        self.uart_terminal.add_output(self._decode_uart_output_escapes(output), "red")
     
     def on_simulator_error(self, error_msg):
         """Handle simulator error"""
