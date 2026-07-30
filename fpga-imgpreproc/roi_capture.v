@@ -1,10 +1,9 @@
 // roi_capture.v
 //
 // Sits between threshold_stream and capture_buffer.  It monitors the
-// mono_axis pixel stream, stores every pixel that falls inside the current
-// ROI into an internal 240×240-bit buffer, and – when triggered – streams
-// the buffer back as ASCII '0'/'1' characters with a '\n' at the end of
-// every row.
+// mono_axis pixel stream, captures a square camera-space ROI, nearest-
+// neighbour downsamples it to 28×28, and – when triggered – streams the
+// result back as ASCII '0'/'1' with a '\n' at the end of every row.
 //
 // Clock domains
 // -------------
@@ -15,10 +14,19 @@
 //   vga_x = cam_x * 4        =>  cam_x = vga_x >> 2
 //   vga_y = (255-cam_y) * 2  =>  cam_y = 255 - (vga_y >> 1)
 //
-// Buffer layout:  address = rel_y * 240 + rel_x
-// Maximum ROI (large, rect_half=240): 120 cols × 240 rows  → fits in 240×240
+// Square ROI sizes in camera-pixel space (exact multiples of 28 → no
+// fractional arithmetic needed for nearest-neighbour downsampling):
+//
+//   roi_size_sel  cam_half  cam size   NN step  VGA box (W×H)
+//       0  (S)      14      28 × 28       1      112 × 56
+//       1  (M)      28      56 × 56       2      224 × 112
+//       2  (L)      56     112 × 112      4      448 × 224
+//
+// Buffer layout: address = cell_y * 28 + cell_x  (784 bits = 98 bytes)
 
-module roi_capture (
+module roi_capture #(
+  parameter VFLIP = 1   // 1 = vertically flip rows when writing to buffer
+) (
   // -------------------------------------------------------------------
   // Write side – camera pixel clock domain
   // -------------------------------------------------------------------
@@ -72,24 +80,24 @@ module roi_capture (
   // =========================================================================
   // ROI boundary computation (combinational)
   // =========================================================================
-  wire [9:0] rect_half =
-    (roi_size_sel == 2'd0) ? 10'd60  :
-    (roi_size_sel == 2'd1) ? 10'd120 : 10'd240;
+  // Square ROI: separate VGA half-extents in x (×4) and y (×2) so that the
+  // captured region is cam_half × cam_half camera pixels.
 
-  // VGA-space boundaries
-  wire [9:0] roi_left_vga   = roi_cx - rect_half;
-  wire [9:0] roi_right_vga  = roi_cx + rect_half - 10'd1;
-  wire [8:0] roi_top_vga    = roi_cy - rect_half[8:0];
-  wire [8:0] roi_bottom_vga = roi_cy + rect_half[8:0] - 9'd1;
+  wire [6:0] cam_half =
+    (roi_size_sel == 2'd0) ? 7'd14 :
+    (roi_size_sel == 2'd1) ? 7'd28 : 7'd56;
 
-  // Camera-pixel-space boundaries derived from VGA bounds
-  wire [7:0] roi_cam_x_min = roi_left_vga[9:2];
-  wire [7:0] roi_cam_x_max = roi_right_vga[9:2];
-  wire [7:0] roi_cam_y_min = 8'd255 - roi_bottom_vga[8:1];
-  wire [7:0] roi_cam_y_max = 8'd255 - roi_top_vga[8:1];
+  // Camera-space centre derived from VGA coordinates
+  wire [7:0] cam_cx = roi_cx[9:2];            // roi_cx / 4
+  wire [7:0] cam_cy = 8'd255 - roi_cy[8:1];  // 255 - roi_cy / 2
+
+  wire [7:0] roi_cam_x_min = cam_cx - {1'b0, cam_half};
+  wire [7:0] roi_cam_x_max = cam_cx + {1'b0, cam_half} - 8'd1;
+  wire [7:0] roi_cam_y_min = cam_cy - {1'b0, cam_half};
+  wire [7:0] roi_cam_y_max = cam_cy + {1'b0, cam_half} - 8'd1;
 
   // =========================================================================
-  // Capture logic – data_clk domain
+  // Nearest-neighbour capture – data_clk domain
   // =========================================================================
   wire pix_in_roi = s_valid
                   && (s_x >= roi_cam_x_min) && (s_x <= roi_cam_x_max)
@@ -98,18 +106,55 @@ module roi_capture (
   wire [7:0] rel_x = s_x - roi_cam_x_min;
   wire [7:0] rel_y = s_y - roi_cam_y_min;
 
-  // Buffer address: rel_y * 240 + rel_x   (240 = 256 - 16)
-  wire [15:0] wr_addr = ({8'd0, rel_y} << 8)
-                      - ({8'd0, rel_y} << 4)
-                      + {8'd0, rel_x};
+  // Only sample at the top-left corner of each output cell.
+  // S: every pixel (step=1), M: every 2nd (step=2), L: every 4th (step=4)
+  wire pix_is_sample =
+    (roi_size_sel == 2'd0) ? 1'b1 :
+    (roi_size_sel == 2'd1) ? (rel_x[0] == 1'b0 && rel_y[0] == 1'b0) :
+                             (rel_x[1:0] == 2'b00 && rel_y[1:0] == 2'b00);
 
-  // 240×240 = 57,600-bit capture buffer (7200 bytes × 8 bits)
-  // Written from data_clk; read from ctrl_clk
-  reg [7:0] roi_buf [7199:0];
+  // Output cell coordinates (bit-select division by 1/2/4)
+  wire [4:0] cell_x =
+    (roi_size_sel == 2'd0) ? rel_x[4:0] :
+    (roi_size_sel == 2'd1) ? rel_x[5:1] : rel_x[6:2];
 
-  always @(posedge data_clk) begin
-    if (pix_in_roi) begin
-      roi_buf[wr_addr >> 3][wr_addr & 7] <= s_pixel;
+  wire [4:0] cell_y =
+    (roi_size_sel == 2'd0) ? rel_y[4:0] :
+    (roi_size_sel == 2'd1) ? rel_y[5:1] : rel_y[6:2];
+
+  // Buffer address: wr_cell_y * 28 + cell_x  (28 = 32 - 4)
+  wire [4:0] wr_cell_y = VFLIP ? (5'd27 - cell_y) : cell_y;
+  wire [9:0] wr_addr = ({5'd0, wr_cell_y} << 5)
+                     - ({5'd0, wr_cell_y} << 2)
+                     + {5'd0, cell_x};
+
+  // 28×28 = 784-bit output buffer (98 bytes × 8 bits).
+  // Written from data_clk; read by the dump FSM on ctrl_clk.
+  reg [7:0] roi_buf [97:0];
+
+  // Clear the buffer at frame end so stale ink does not persist.
+  reg [6:0] clear_cnt;
+  reg       clearing;
+
+  always @(posedge data_clk or negedge data_rst_n) begin
+    if (!data_rst_n) begin
+      clearing  <= 1'b1;
+      clear_cnt <= 7'd0;
+    end else if (clearing) begin
+      roi_buf[clear_cnt] <= 8'd0;
+      if (clear_cnt == 7'd97) begin
+        clearing  <= 1'b0;
+        clear_cnt <= 7'd0;
+      end else begin
+        clear_cnt <= clear_cnt + 7'd1;
+      end
+    end else begin
+      if (s_valid && s_tlast) begin
+        clearing  <= 1'b1;
+        clear_cnt <= 7'd0;
+      end
+      if (pix_in_roi && pix_is_sample)
+        roi_buf[wr_addr >> 3][wr_addr & 7] <= s_pixel;
     end
   end
 
@@ -117,10 +162,8 @@ module roi_capture (
   // Dump FSM – ctrl_clk domain
   // =========================================================================
   //
-  // ROI dimensions in camera pixels:
-  //   size 0 (small):  cols = 30,  rows = 60
-  //   size 1 (medium): cols = 60,  rows = 120
-  //   size 2 (large):  cols = 120, rows = 240
+  // Always dumps a 28×28 grid, regardless of original ROI size (S/M/L)
+  // Incoming pixels are downsampled via OR-reduction during capture.
   //
   // State machine
   //   IDLE        – wait for dump pulse
@@ -132,16 +175,12 @@ module roi_capture (
   localparam DUMP_SEND_NL    = 2'd2;
 
   reg [1:0]  dump_state;
-  reg [7:0]  dump_row_cnt;
-  reg [7:0]  dump_col_cnt;
-  reg [7:0]  dump_total_rows;   // latched when dump starts
-  reg [7:0]  dump_total_cols;
+  reg [4:0]  dump_row_cnt;
+  reg [4:0]  dump_col_cnt;
 
   // Registered buffer reads (ctrl_clk domain) with pipelining
-  wire [15:0] rd_addr_w = ({8'd0, dump_row_cnt} << 8)
-                        - ({8'd0, dump_row_cnt} << 4)
-                        + {8'd0, dump_col_cnt};
-  wire [15:0] rd_byte_addr = rd_addr_w >> 3;
+  wire [9:0] rd_addr_w = ({5'd0, dump_row_cnt} << 5) - ({5'd0, dump_row_cnt} << 2) + {5'd0, dump_col_cnt};
+  wire [9:0] rd_byte_addr = rd_addr_w >> 3;
   wire [2:0] rd_bit_addr = rd_addr_w[2:0];
 
   reg rd_data_0, rd_data_1;  // pipeline delay for BRAM read
@@ -153,10 +192,8 @@ module roi_capture (
   always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
     if (!ctrl_rst_n) begin
       dump_state      <= DUMP_IDLE;
-      dump_row_cnt    <= 8'd0;
-      dump_col_cnt    <= 8'd0;
-      dump_total_rows <= 8'd0;
-      dump_total_cols <= 8'd0;
+      dump_row_cnt    <= 5'd0;
+      dump_col_cnt    <= 5'd0;
       dump_o_valid    <= 1'b0;
       dump_o_byte     <= 8'd0;
       dump_o_last     <= 1'b0;
@@ -168,13 +205,9 @@ module roi_capture (
           dump_o_valid <= 1'b0;
           dump_o_last  <= 1'b0;
           if (dump) begin
-            dump_row_cnt    <= 8'd0;
-            dump_col_cnt    <= 8'd0;
-            dump_total_rows <= (roi_size_sel == 2'd0) ? 8'd60  :
-                               (roi_size_sel == 2'd1) ? 8'd120 : 8'd240;
-            dump_total_cols <= (roi_size_sel == 2'd0) ? 8'd30  :
-                               (roi_size_sel == 2'd1) ? 8'd60  : 8'd120;
-            dump_state      <= DUMP_SEND_PIXEL;
+            dump_row_cnt <= 5'd0;
+            dump_col_cnt <= 5'd0;
+            dump_state   <= DUMP_SEND_PIXEL;
           end
         end
 
@@ -185,11 +218,11 @@ module roi_capture (
           dump_o_last  <= 1'b0;
           if (dump_o_ready) begin
             // Transfer accepted – advance to next pixel or end-of-row.
-            if (dump_col_cnt == dump_total_cols - 8'd1) begin
-              dump_col_cnt <= 8'd0;
+            if (dump_col_cnt == 5'd27) begin
+              dump_col_cnt <= 5'd0;
               dump_state   <= DUMP_SEND_NL;
             end else begin
-              dump_col_cnt <= dump_col_cnt + 8'd1;
+              dump_col_cnt <= dump_col_cnt + 5'd1;
             end
           end
         end
@@ -198,12 +231,12 @@ module roi_capture (
         DUMP_SEND_NL: begin
           dump_o_valid <= 1'b1;
           dump_o_byte  <= 8'h0A;   // '\n'
-          dump_o_last  <= (dump_row_cnt == dump_total_rows - 8'd1);
+          dump_o_last  <= (dump_row_cnt == 5'd27);
           if (dump_o_ready) begin
-            if (dump_row_cnt == dump_total_rows - 8'd1) begin
+            if (dump_row_cnt == 5'd27) begin
               dump_state <= DUMP_IDLE;           // all done
             end else begin
-              dump_row_cnt <= dump_row_cnt + 8'd1;
+              dump_row_cnt <= dump_row_cnt + 5'd1;
               dump_state   <= DUMP_SEND_PIXEL;
             end
           end

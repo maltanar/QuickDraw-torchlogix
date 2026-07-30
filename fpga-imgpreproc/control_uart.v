@@ -23,15 +23,19 @@ module control_uart (
   localparam [9:0] MOVE_STEP_X = 10'd4;
   localparam [8:0] MOVE_STEP_Y = 9'd4;
 
-  wire [9:0] rect_half =
-    (roi_size_sel == 2'd0) ? 10'd60 :
-    (roi_size_sel == 2'd1) ? 10'd120 :
-                             10'd240;
+  // Asymmetric VGA half-extents for square camera-pixel ROI
+  // (vga_half_x = cam_half*4,  vga_half_y = cam_half*2)
+  wire [9:0] rect_half_x =
+    (roi_size_sel == 2'd0) ? 10'd56  :
+    (roi_size_sel == 2'd1) ? 10'd112 : 10'd224;
+  wire [8:0] rect_half_y =
+    (roi_size_sel == 2'd0) ? 9'd28 :
+    (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
 
-  wire [9:0] rect_cx_min = rect_half;
-  wire [9:0] rect_cx_max = VGA_W - rect_half;
-  wire [8:0] rect_cy_min = rect_half[8:0];
-  wire [8:0] rect_cy_max = VGA_H - rect_half[8:0];
+  wire [9:0] rect_cx_min = rect_half_x;
+  wire [9:0] rect_cx_max = VGA_W - rect_half_x;
+  wire [8:0] rect_cy_min = rect_half_y;
+  wire [8:0] rect_cy_max = VGA_H - rect_half_y;
 
   wire [7:0] uart_rx_data;
   wire uart_rx_valid;
@@ -116,8 +120,8 @@ module control_uart (
       threshold_wdata <= 4'd7;
       uart_esc_state <= 2'd0;
       roi_size_sel <= 2'd1;
-      roi_cx <= 10'd120;
-      roi_cy <= 9'd120;
+      roi_cx <= 10'd320;
+      roi_cy <= 9'd240;
       label_idx <= 4'd0;
       dump_mode <= 1'b0;
       roi_dump <= 1'b0;

@@ -128,15 +128,19 @@ module renderer (
     end
   endfunction
 
-  wire [9:0] rect_half =
-    (roi_size_sel == 2'd0) ? 10'd60 :
-    (roi_size_sel == 2'd1) ? 10'd120 :
-                             10'd240;
+  // Asymmetric VGA half-extents so the on-screen box encloses a square
+  // region of camera pixels (vga_half_x = cam_half*4, vga_half_y = cam_half*2)
+  wire [9:0] rect_half_x =
+    (roi_size_sel == 2'd0) ? 10'd56  :
+    (roi_size_sel == 2'd1) ? 10'd112 : 10'd224;
+  wire [8:0] rect_half_y =
+    (roi_size_sel == 2'd0) ? 9'd28 :
+    (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
 
-  wire [9:0] rect_left = roi_cx - rect_half;
-  wire [9:0] rect_right = roi_cx + rect_half - 10'd1;
-  wire [8:0] rect_top = roi_cy - rect_half[8:0];
-  wire [8:0] rect_bottom = roi_cy + rect_half[8:0] - 9'd1;
+  wire [9:0] rect_left   = roi_cx - rect_half_x;
+  wire [9:0] rect_right  = roi_cx + rect_half_x - 10'd1;
+  wire [8:0] rect_top    = roi_cy - rect_half_y;
+  wire [8:0] rect_bottom = roi_cy + rect_half_y - 9'd1;
 
   wire [9:0] vga_x = {2'b00, s_x} << 2;
   wire [8:0] vga_y = (9'd255 - {1'b0, s_y}) << 1;
