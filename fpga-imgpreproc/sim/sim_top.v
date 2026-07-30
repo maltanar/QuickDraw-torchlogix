@@ -36,6 +36,11 @@ module sim_top (
   wire [8:0] roi_cy;
   wire [3:0] label_idx;
 
+  wire roi_dump;
+  wire roi_dump_o_valid;
+  wire [7:0] roi_dump_o_byte;
+  wire roi_dump_o_last;
+
   control_uart control_uart_i (
     .clk(clk_25MHz),
     .rst_n(rst_n),
@@ -46,7 +51,12 @@ module sim_top (
     .roi_size_sel(roi_size_sel),
     .roi_cx(roi_cx),
     .roi_cy(roi_cy),
-    .label_idx(label_idx)
+    .label_idx(label_idx),
+    .roi_dump(roi_dump),
+    .roi_dump_o_valid(roi_dump_o_valid),
+    .roi_dump_o_byte(roi_dump_o_byte),
+    .roi_dump_o_last(roi_dump_o_last),
+    .roi_dump_o_ready(roi_dump_o_ready)
   );
 
   // ---------------------------------------------------------------------------
@@ -103,6 +113,42 @@ module sim_top (
   );
 
   // ---------------------------------------------------------------------------
+  // Datapath stage 2.5: ROI capture buffer – intercept mono_axis, write
+  // to internal buffer, and pass-through to capture_buffer.
+  // ---------------------------------------------------------------------------
+  wire mono_axis_valid_out;
+  wire mono_axis_pixel_out;
+  wire mono_axis_tlast_out;
+  wire [7:0] mono_axis_x_out;
+  wire [7:0] mono_axis_y_out;
+  wire roi_dump_o_ready;
+
+  roi_capture roi_capture_i (
+    .data_clk(sim_cam_pclk),
+    .data_rst_n(rst_n),
+    .s_valid(mono_axis_valid),
+    .s_pixel(mono_axis_pixel),
+    .s_tlast(mono_axis_tlast),
+    .s_x(mono_axis_x),
+    .s_y(mono_axis_y),
+    .m_valid(mono_axis_valid_out),
+    .m_pixel(mono_axis_pixel_out),
+    .m_tlast(mono_axis_tlast_out),
+    .m_x(mono_axis_x_out),
+    .m_y(mono_axis_y_out),
+    .roi_cx(roi_cx),
+    .roi_cy(roi_cy),
+    .roi_size_sel(roi_size_sel),
+    .ctrl_clk(clk_25MHz),
+    .ctrl_rst_n(rst_n),
+    .dump(roi_dump),
+    .dump_o_valid(roi_dump_o_valid),
+    .dump_o_byte(roi_dump_o_byte),
+    .dump_o_last(roi_dump_o_last),
+    .dump_o_ready(roi_dump_o_ready)
+  );
+
+  // ---------------------------------------------------------------------------
   // Datapath stage 3: capture buffer write (camera clock) and read (25 MHz).
   // ---------------------------------------------------------------------------
   wire cap_re;
@@ -111,9 +157,9 @@ module sim_top (
 
   capture_buffer capture_buffer_i (
     .wclk(sim_cam_pclk),
-    .we(mono_axis_valid),
-    .waddr({mono_axis_y, mono_axis_x}),
-    .wmono(mono_axis_pixel),
+    .we(mono_axis_valid_out),
+    .waddr({mono_axis_y_out, mono_axis_x_out}),
+    .wmono(mono_axis_pixel_out),
     .rclk(clk_25MHz),
     .re(cap_re),
     .raddr(cap_raddr),

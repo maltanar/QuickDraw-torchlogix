@@ -9,7 +9,13 @@ module control_uart (
   output reg [1:0]  roi_size_sel,
   output reg [9:0]  roi_cx,
   output reg [8:0]  roi_cy,
-  output reg [3:0]  label_idx
+  output reg [3:0]  label_idx,
+
+  output reg        roi_dump,          // 1-cycle pulse: trigger ROI buffer dump
+  input  wire       roi_dump_o_valid,  // roi_capture has a byte ready
+  input  wire [7:0] roi_dump_o_byte,   // ASCII byte from roi_capture
+  input  wire       roi_dump_o_last,   // last byte of the dump
+  output wire       roi_dump_o_ready   // we can accept a byte
 );
 
   localparam [9:0] VGA_W = 10'd640;
@@ -36,6 +42,7 @@ module control_uart (
   reg uart_send_active;
   reg [4:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
+  reg       dump_mode;
 
   // Format: "T:X X:XXX Y:XXX S:X\n" (hex values, 20 bytes)
   function [7:0] hex_char;
@@ -51,6 +58,7 @@ module control_uart (
                              8'h4C;   // 'L'
 
   assign uart_tx_din =
+    dump_mode             ? roi_dump_o_byte :                  // ROI dump byte
     (uart_msg_idx == 5'd0)  ? 8'h54 :                          // 'T'
     (uart_msg_idx == 5'd1)  ? 8'h3A :                          // ':'
     (uart_msg_idx == 5'd2)  ? hex_char(threshold_wdata) :      // threshold hex
@@ -72,7 +80,10 @@ module control_uart (
     (uart_msg_idx == 5'd18) ? tx_size_char :                   // size char
                               8'h0A;                           // '\n'
 
-  assign uart_tx_wr = uart_send_active && !uart_tx_busy;
+  // dump takes priority; suppress status TX while dumping
+  assign roi_dump_o_ready = dump_mode && !uart_tx_busy;
+  assign uart_tx_wr = !uart_tx_busy &&
+                      (dump_mode ? roi_dump_o_valid : uart_send_active);
 
   uart_rx #(
     .CLK_FREQ(25000000),
@@ -108,8 +119,16 @@ module control_uart (
       roi_cx <= 10'd120;
       roi_cy <= 9'd120;
       label_idx <= 4'd0;
+      dump_mode <= 1'b0;
+      roi_dump <= 1'b0;
     end else begin
       threshold_wr <= 1'b0;
+      roi_dump <= 1'b0;
+
+      // Clear dump_mode when the last ASCII byte of the dump is accepted.
+      if (roi_dump_o_valid && roi_dump_o_ready && roi_dump_o_last) begin
+        dump_mode <= 1'b0;
+      end
 
       if (uart_rx_valid) begin
         if (uart_esc_state == 2'd0) begin
@@ -150,6 +169,12 @@ module control_uart (
             if (!uart_send_active) begin
               uart_send_active <= 1'b1;
               uart_msg_idx <= 5'd0;
+            end
+          end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
+            // 'C' or 'c': trigger ROI capture dump over UART
+            if (!dump_mode) begin
+              roi_dump  <= 1'b1;
+              dump_mode <= 1'b1;
             end
           end else if ((uart_rx_data >= 8'h30) && (uart_rx_data <= 8'h39)) begin
             label_idx <= uart_rx_data - 8'h30;
@@ -213,7 +238,7 @@ module control_uart (
         roi_cy <= rect_cy_max;
       end
 
-      if (uart_send_active && !uart_tx_busy) begin
+      if (uart_send_active && !uart_tx_busy && !dump_mode) begin
         if (uart_msg_idx == 5'd19) begin
           uart_send_active <= 1'b0;
         end else begin
