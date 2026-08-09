@@ -52,16 +52,25 @@ module score_argmax10 (
   reg s2_valid;
   reg s3_valid;
 
-  reg [9:0] p0;
-  reg [9:0] p1;
-  reg [9:0] p2;
-  reg [9:0] p3;
-  reg [9:0] p4;
-  reg [9:0] q0;
-  reg [9:0] q1;
-  reg [9:0] r0;
+  wire [9:0] p0_comb;
+  wire [9:0] p1_comb;
+  wire [9:0] p2_comb;
+  wire [9:0] p3_comb;
+  wire [9:0] p4_comb;
+  wire [9:0] q0_comb;
+  wire [9:0] q1_comb;
+  wire [9:0] r0_comb;
   wire [9:0] final_pair;
 
+  assign p0_comb = max_pair(class_score(scores, 4'd0), 4'd0, class_score(scores, 4'd1), 4'd1);
+  assign p1_comb = max_pair(class_score(scores, 4'd2), 4'd2, class_score(scores, 4'd3), 4'd3);
+  assign p2_comb = max_pair(class_score(scores, 4'd4), 4'd4, class_score(scores, 4'd5), 4'd5);
+  assign p3_comb = max_pair(class_score(scores, 4'd6), 4'd6, class_score(scores, 4'd7), 4'd7);
+  assign p4_comb = max_pair(class_score(scores, 4'd8), 4'd8, class_score(scores, 4'd9), 4'd9);
+
+  assign q0_comb = max_pair(s1_v0, s1_i0, s1_v1, s1_i1);
+  assign q1_comb = max_pair(s1_v2, s1_i2, s1_v3, s1_i3);
+  assign r0_comb = max_pair(s2_v0, s2_i0, s2_v1, s2_i1);
   assign final_pair = max_pair(s3_v0, s3_i0, s3_v1, s3_i1);
 
   always @(posedge clk or negedge rst_n) begin
@@ -91,14 +100,6 @@ module score_argmax10 (
       s2_valid <= 1'b0;
       s3_valid <= 1'b0;
       out_valid <= 1'b0;
-      p0 <= 10'd0;
-      p1 <= 10'd0;
-      p2 <= 10'd0;
-      p3 <= 10'd0;
-      p4 <= 10'd0;
-      q0 <= 10'd0;
-      q1 <= 10'd0;
-      r0 <= 10'd0;
     end else begin
       // Valid pipeline for deterministic handoff to UART control.
       s1_valid <= in_valid;
@@ -106,41 +107,38 @@ module score_argmax10 (
       s3_valid <= s2_valid;
       out_valid <= s3_valid;
 
-      p0 <= max_pair(class_score(scores, 4'd0), 4'd0, class_score(scores, 4'd1), 4'd1);
-      p1 <= max_pair(class_score(scores, 4'd2), 4'd2, class_score(scores, 4'd3), 4'd3);
-      p2 <= max_pair(class_score(scores, 4'd4), 4'd4, class_score(scores, 4'd5), 4'd5);
-      p3 <= max_pair(class_score(scores, 4'd6), 4'd6, class_score(scores, 4'd7), 4'd7);
-      p4 <= max_pair(class_score(scores, 4'd8), 4'd8, class_score(scores, 4'd9), 4'd9);
+      if (in_valid) begin
+        s1_v0 <= p0_comb[9:4];
+        s1_i0 <= p0_comb[3:0];
+        s1_v1 <= p1_comb[9:4];
+        s1_i1 <= p1_comb[3:0];
+        s1_v2 <= p2_comb[9:4];
+        s1_i2 <= p2_comb[3:0];
+        s1_v3 <= p3_comb[9:4];
+        s1_i3 <= p3_comb[3:0];
+        s1_v4 <= p4_comb[9:4];
+        s1_i4 <= p4_comb[3:0];
+      end
 
-      s1_v0 <= p0[9:4];
-      s1_i0 <= p0[3:0];
-      s1_v1 <= p1[9:4];
-      s1_i1 <= p1[3:0];
-      s1_v2 <= p2[9:4];
-      s1_i2 <= p2[3:0];
-      s1_v3 <= p3[9:4];
-      s1_i3 <= p3[3:0];
-      s1_v4 <= p4[9:4];
-      s1_i4 <= p4[3:0];
+      if (s1_valid) begin
+        s2_v0 <= q0_comb[9:4];
+        s2_i0 <= q0_comb[3:0];
+        s2_v1 <= q1_comb[9:4];
+        s2_i1 <= q1_comb[3:0];
+        s2_v2 <= s1_v4;
+        s2_i2 <= s1_i4;
+      end
 
-      q0 <= max_pair(s1_v0, s1_i0, s1_v1, s1_i1);
-      q1 <= max_pair(s1_v2, s1_i2, s1_v3, s1_i3);
+      if (s2_valid) begin
+        s3_v0 <= r0_comb[9:4];
+        s3_i0 <= r0_comb[3:0];
+        s3_v1 <= s2_v2;
+        s3_i1 <= s2_i2;
+      end
 
-      s2_v0 <= q0[9:4];
-      s2_i0 <= q0[3:0];
-      s2_v1 <= q1[9:4];
-      s2_i1 <= q1[3:0];
-      s2_v2 <= s1_v4;
-      s2_i2 <= s1_i4;
-
-      r0 <= max_pair(s2_v0, s2_i0, s2_v1, s2_i1);
-
-      s3_v0 <= r0[9:4];
-      s3_i0 <= r0[3:0];
-      s3_v1 <= s2_v2;
-      s3_i1 <= s2_i2;
-
-      max_idx <= final_pair[3:0];
+      if (s3_valid) begin
+        max_idx <= final_pair[3:0];
+      end
     end
   end
 

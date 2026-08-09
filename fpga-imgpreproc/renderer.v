@@ -21,6 +21,10 @@ module renderer (
   localparam [9:0] BORDER_THICK = 10'd2;
   localparam [9:0] TEXT_X_OFF = 10'd6;
   localparam [8:0] TEXT_Y_OFF = 9'd6;
+  localparam [3:0] MAX_NAME_LEN = 4'd11;
+  localparam [2:0] GLYPH_W = 3'd4;
+  localparam [2:0] GLYPH_H = 3'd4;
+  localparam [2:0] GLYPH_ADV = 3'd5;
 
   function [3:0] font4x4_row;
     input [7:0] ch;
@@ -123,7 +127,227 @@ module renderer (
           2'd2: font4x4_row = 4'b1000;
           default: font4x4_row = 4'b1000;
         endcase
+        "_": case (row)
+          2'd0: font4x4_row = 4'b0000;
+          2'd1: font4x4_row = 4'b0000;
+          2'd2: font4x4_row = 4'b0000;
+          default: font4x4_row = 4'b1111;
+        endcase
+        "a": case (row)
+          2'd0: font4x4_row = 4'b0110;
+          2'd1: font4x4_row = 4'b0001;
+          2'd2: font4x4_row = 4'b0111;
+          default: font4x4_row = 4'b0111;
+        endcase
+        "b": case (row)
+          2'd0: font4x4_row = 4'b1000;
+          2'd1: font4x4_row = 4'b1110;
+          2'd2: font4x4_row = 4'b1001;
+          default: font4x4_row = 4'b1110;
+        endcase
+        "c": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b1000;
+          2'd2: font4x4_row = 4'b1000;
+          default: font4x4_row = 4'b0111;
+        endcase
+        "e": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b1110;
+          2'd2: font4x4_row = 4'b1000;
+          default: font4x4_row = 4'b0111;
+        endcase
+        "f": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b1110;
+          2'd2: font4x4_row = 4'b1000;
+          default: font4x4_row = 4'b1000;
+        endcase
+        "g": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b1000;
+          2'd2: font4x4_row = 4'b1011;
+          default: font4x4_row = 4'b0111;
+        endcase
+        "h": case (row)
+          2'd0: font4x4_row = 4'b1001;
+          2'd1: font4x4_row = 4'b1111;
+          2'd2: font4x4_row = 4'b1001;
+          default: font4x4_row = 4'b1001;
+        endcase
+        "i": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b0010;
+          2'd2: font4x4_row = 4'b0010;
+          default: font4x4_row = 4'b0111;
+        endcase
+        "k": case (row)
+          2'd0: font4x4_row = 4'b1001;
+          2'd1: font4x4_row = 4'b1010;
+          2'd2: font4x4_row = 4'b1100;
+          default: font4x4_row = 4'b1010;
+        endcase
+        "l": case (row)
+          2'd0: font4x4_row = 4'b1000;
+          2'd1: font4x4_row = 4'b1000;
+          2'd2: font4x4_row = 4'b1000;
+          default: font4x4_row = 4'b1111;
+        endcase
+        "m": case (row)
+          2'd0: font4x4_row = 4'b1001;
+          2'd1: font4x4_row = 4'b1111;
+          2'd2: font4x4_row = 4'b1111;
+          default: font4x4_row = 4'b1001;
+        endcase
+        "n": case (row)
+          2'd0: font4x4_row = 4'b1001;
+          2'd1: font4x4_row = 4'b1101;
+          2'd2: font4x4_row = 4'b1011;
+          default: font4x4_row = 4'b1001;
+        endcase
+        "o": case (row)
+          2'd0: font4x4_row = 4'b0110;
+          2'd1: font4x4_row = 4'b1001;
+          2'd2: font4x4_row = 4'b1001;
+          default: font4x4_row = 4'b0110;
+        endcase
+        "p": case (row)
+          2'd0: font4x4_row = 4'b1110;
+          2'd1: font4x4_row = 4'b1001;
+          2'd2: font4x4_row = 4'b1110;
+          default: font4x4_row = 4'b1000;
+        endcase
+        "r": case (row)
+          2'd0: font4x4_row = 4'b1110;
+          2'd1: font4x4_row = 4'b1001;
+          2'd2: font4x4_row = 4'b1110;
+          default: font4x4_row = 4'b1010;
+        endcase
+        "s": case (row)
+          2'd0: font4x4_row = 4'b0111;
+          2'd1: font4x4_row = 4'b0110;
+          2'd2: font4x4_row = 4'b0001;
+          default: font4x4_row = 4'b1110;
+        endcase
+        "t": case (row)
+          2'd0: font4x4_row = 4'b1111;
+          2'd1: font4x4_row = 4'b0010;
+          2'd2: font4x4_row = 4'b0010;
+          default: font4x4_row = 4'b0010;
+        endcase
+        "y": case (row)
+          2'd0: font4x4_row = 4'b1001;
+          2'd1: font4x4_row = 4'b0110;
+          2'd2: font4x4_row = 4'b0010;
+          default: font4x4_row = 4'b0010;
+        endcase
         default: font4x4_row = 4'b0000;
+      endcase
+    end
+  endfunction
+
+  function [7:0] class_char;
+    input [3:0] cls;
+    input [3:0] pos;
+    begin
+      class_char = 8'h20;
+      case (cls)
+        4'd0: case (pos) // bicycle
+          4'd0: class_char = "b";
+          4'd1: class_char = "i";
+          4'd2: class_char = "c";
+          4'd3: class_char = "y";
+          4'd4: class_char = "c";
+          4'd5: class_char = "l";
+          4'd6: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd1: case (pos) // eyeglasses
+          4'd0: class_char = "e";
+          4'd1: class_char = "y";
+          4'd2: class_char = "e";
+          4'd3: class_char = "g";
+          4'd4: class_char = "l";
+          4'd5: class_char = "a";
+          4'd6: class_char = "s";
+          4'd7: class_char = "s";
+          4'd8: class_char = "e";
+          4'd9: class_char = "s";
+          default: class_char = 8'h20;
+        endcase
+        4'd2: case (pos) // car
+          4'd0: class_char = "c";
+          4'd1: class_char = "a";
+          4'd2: class_char = "r";
+          default: class_char = 8'h20;
+        endcase
+        4'd3: case (pos) // eye
+          4'd0: class_char = "e";
+          4'd1: class_char = "y";
+          4'd2: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd4: case (pos) // tree
+          4'd0: class_char = "t";
+          4'd1: class_char = "r";
+          4'd2: class_char = "e";
+          4'd3: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd5: case (pos) // apple
+          4'd0: class_char = "a";
+          4'd1: class_char = "p";
+          4'd2: class_char = "p";
+          4'd3: class_char = "l";
+          4'd4: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd6: case (pos) // smiley_face
+          4'd0: class_char = "s";
+          4'd1: class_char = "m";
+          4'd2: class_char = "i";
+          4'd3: class_char = "l";
+          4'd4: class_char = "e";
+          4'd5: class_char = "y";
+          4'd6: class_char = "_";
+          4'd7: class_char = "f";
+          4'd8: class_char = "a";
+          4'd9: class_char = "c";
+          4'd10: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd7: case (pos) // cell_phone
+          4'd0: class_char = "c";
+          4'd1: class_char = "e";
+          4'd2: class_char = "l";
+          4'd3: class_char = "l";
+          4'd4: class_char = "_";
+          4'd5: class_char = "p";
+          4'd6: class_char = "h";
+          4'd7: class_char = "o";
+          4'd8: class_char = "n";
+          4'd9: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd8: case (pos) // airplane
+          4'd0: class_char = "a";
+          4'd1: class_char = "i";
+          4'd2: class_char = "r";
+          4'd3: class_char = "p";
+          4'd4: class_char = "l";
+          4'd5: class_char = "a";
+          4'd6: class_char = "n";
+          4'd7: class_char = "e";
+          default: class_char = 8'h20;
+        endcase
+        4'd9: case (pos) // book
+          4'd0: class_char = "b";
+          4'd1: class_char = "o";
+          4'd2: class_char = "o";
+          4'd3: class_char = "k";
+          default: class_char = 8'h20;
+        endcase
+        default: class_char = 8'h20;
       endcase
     end
   endfunction
@@ -171,19 +395,31 @@ module renderer (
 
   wire draw_border = on_left_edge || on_right_edge || on_top_edge || on_bottom_edge;
 
-  wire [7:0] label_char =
-    (label_idx < 4'd10) ? (8'd48 + {4'd0, label_idx}) : (8'd55 + {4'd0, label_idx});
-
-  wire [9:0] text_x0 = rect_left + TEXT_X_OFF;
-  wire [8:0] text_y0 = rect_top + TEXT_Y_OFF;
+  // Text rasterization runs at logical pixel rate (each logical pixel is 4x2 VGA px).
+  // Sampling the font at this grid avoids dotted/striped aliasing.
+  wire [9:0] text_x0 = (rect_left + TEXT_X_OFF + 10'd3) & 10'h3FC; // align to 4 px
+  wire [8:0] text_y0 = (rect_top + TEXT_Y_OFF + 9'd1) & 9'h1FE;    // align to 2 px
+  wire [7:0] text_w_cells = ({4'd0, MAX_NAME_LEN} * {5'd0, GLYPH_ADV});
+  wire [9:0] text_rel_x_cells_full = (vga_x - text_x0) >> 2;
+  wire [8:0] text_rel_y_cells_full = (vga_y - text_y0) >> 1;
+  wire [7:0] text_rel_x_cells = text_rel_x_cells_full[7:0];
+  wire [7:0] text_rel_y_cells = text_rel_y_cells_full[7:0];
   wire text_in_bounds =
-    (vga_x >= text_x0) && (vga_x < (text_x0 + 10'd4)) &&
-    (vga_y >= text_y0) && (vga_y < (text_y0 + 9'd4));
+    (vga_x >= text_x0) &&
+    (vga_y >= text_y0) &&
+    (text_rel_x_cells < text_w_cells) &&
+    (text_rel_y_cells < {5'd0, GLYPH_H});
 
-  wire [1:0] text_rel_x = vga_x[1:0];
-  wire [1:0] text_rel_y = vga_y - text_y0;
-  wire [3:0] text_row_bits = font4x4_row(label_char, text_rel_y);
-  wire text_pixel = text_in_bounds && text_row_bits[3 - text_rel_x];
+  wire [7:0] text_char_idx_full = text_rel_x_cells / 8'd5;
+  wire [7:0] text_col_full = text_rel_x_cells % 8'd5;
+  wire [3:0] text_char_idx = text_char_idx_full[3:0];
+  wire [2:0] text_col = text_col_full[2:0];
+  wire [1:0] text_row = text_rel_y_cells[1:0];
+  wire text_col_is_glyph = (text_col < GLYPH_W);
+  wire [7:0] text_char = class_char(label_idx, text_char_idx);
+  wire [3:0] text_row_bits = font4x4_row(text_char, text_row);
+  wire text_pixel = text_in_bounds && text_col_is_glyph && (text_char != 8'h20) &&
+                    text_row_bits[3 - text_col[1:0]];
 
   wire [3:0] bw_level = s_mono ? 4'hF : 4'h0;
   wire [11:0] mono_rgb = {bw_level, bw_level, bw_level};

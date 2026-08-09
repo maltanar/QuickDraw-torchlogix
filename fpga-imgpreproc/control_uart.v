@@ -146,6 +146,7 @@ module control_uart (
 
       if (nn_best_valid && nn_wait_mode) begin
         nn_wait_mode <= 1'b0;
+        label_idx <= nn_best_idx;
         idx_mode <= 1'b1;
         idx_tx_phase <= 2'd0;
       end
