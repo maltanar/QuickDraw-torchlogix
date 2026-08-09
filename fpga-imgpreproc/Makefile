@@ -7,6 +7,8 @@ VERILOG_FILES := \
     threshold_stream.v \
     capture_buffer.v \
     capture_reader.v \
+    roi_capture.v \
+    roi_inferencer.v \
     renderer.v \
     vga_scanout.v \
     control_uart.v \

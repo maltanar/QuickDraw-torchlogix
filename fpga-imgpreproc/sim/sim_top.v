@@ -35,6 +35,9 @@ module sim_top (
   wire [9:0] roi_cx;
   wire [8:0] roi_cy;
   wire [3:0] label_idx;
+  wire nn_start;
+  wire nn_done;
+  wire [59:0] nn_scores;
 
   wire roi_dump;
   wire roi_dump_o_valid;
@@ -52,6 +55,9 @@ module sim_top (
     .roi_cx(roi_cx),
     .roi_cy(roi_cy),
     .label_idx(label_idx),
+    .nn_start(nn_start),
+    .nn_done(nn_done),
+    .nn_scores(nn_scores),
     .roi_dump(roi_dump),
     .roi_dump_o_valid(roi_dump_o_valid),
     .roi_dump_o_byte(roi_dump_o_byte),
@@ -121,6 +127,7 @@ module sim_top (
   wire mono_axis_tlast_out;
   wire [7:0] mono_axis_x_out;
   wire [7:0] mono_axis_y_out;
+  wire [783:0] roi_bits;
   wire roi_dump_o_ready;
 
   roi_capture roi_capture_i (
@@ -141,11 +148,21 @@ module sim_top (
     .roi_size_sel(roi_size_sel),
     .ctrl_clk(clk_25MHz),
     .ctrl_rst_n(rst_n),
+    .roi_bits(roi_bits),
     .dump(roi_dump),
     .dump_o_valid(roi_dump_o_valid),
     .dump_o_byte(roi_dump_o_byte),
     .dump_o_last(roi_dump_o_last),
     .dump_o_ready(roi_dump_o_ready)
+  );
+
+  roi_inferencer roi_inferencer_i (
+    .clk(clk_25MHz),
+    .rst_n(rst_n),
+    .start(nn_start),
+    .roi_bits(roi_bits),
+    .done(nn_done),
+    .scores(nn_scores)
   );
 
   // ---------------------------------------------------------------------------

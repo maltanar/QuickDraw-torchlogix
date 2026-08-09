@@ -377,6 +377,11 @@ class QuickDrawSimulator(QMainWindow):
         self.uart_terminal.add_output("QuickDraw FPGA Simulator\n", "green")
         self.uart_terminal.add_output("Click 'Initialize Simulation' to start.\n", "green")
         self.uart_terminal.add_output("Keys: ←→↑↓=move ROI  S/M/L=size  +/-=threshold  ?=status\n", "green")
+        self.uart_terminal.add_output("Press c to run inference and print integer class scores.\n", "green")
+
+        # UART score-frame parser state. Score frames start with '!' and end with '\n'.
+        self._uart_score_mode = False
+        self._uart_score_buf = ""
     
     def _send_uart_cmd(self, cmd):
         """Send a UART command string"""
@@ -413,6 +418,41 @@ class QuickDrawSimulator(QMainWindow):
             return bytes(text, "utf-8").decode("unicode_escape")
         except Exception:
             return text
+
+    def _format_uart_stream(self, text):
+        """Format UART stream, converting !<scores> frames into integer scores."""
+        out = []
+        for ch in text:
+            if not self._uart_score_mode:
+                if ch == '!':
+                    self._uart_score_mode = True
+                    self._uart_score_buf = ""
+                else:
+                    out.append(ch)
+            else:
+                if ch == '\n':
+                    out.append(self._format_score_line(self._uart_score_buf))
+                    self._uart_score_mode = False
+                    self._uart_score_buf = ""
+                elif ch != '\r':
+                    self._uart_score_buf += ch
+        return "".join(out)
+
+    def _format_score_line(self, score_payload):
+        """Parse score payload tokens as integers and return formatted text."""
+        tokens = score_payload.strip().split()
+        if not tokens:
+            return "!\n"
+
+        values = []
+        for tok in tokens:
+            if tok and all(c in '01' for c in tok):
+                values.append(str(int(tok, 2)))
+            elif tok.isdigit():
+                values.append(str(int(tok, 10)))
+            else:
+                return f"!{score_payload}\n"
+        return "! " + " ".join(values) + "\n"
     
     def _on_scale_changed(self, value):
         self.scale_label.setText(f"{value}x")
@@ -469,7 +509,10 @@ class QuickDrawSimulator(QMainWindow):
     
     def on_uart_output(self, output):
         """Receive UART output"""
-        self.uart_terminal.add_output(self._decode_uart_output_escapes(output), "red")
+        decoded = self._decode_uart_output_escapes(output)
+        formatted = self._format_uart_stream(decoded)
+        if formatted:
+            self.uart_terminal.add_output(formatted, "red")
     
     def on_simulator_error(self, error_msg):
         """Handle simulator error"""

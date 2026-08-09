@@ -11,6 +11,10 @@ module control_uart (
   output reg [8:0]  roi_cy,
   output reg [3:0]  label_idx,
 
+  output reg        nn_start,
+  input  wire       nn_done,
+  input  wire [59:0] nn_scores,
+
   output reg        roi_dump,          // 1-cycle pulse: trigger ROI buffer dump
   input  wire       roi_dump_o_valid,  // roi_capture has a byte ready
   input  wire [7:0] roi_dump_o_byte,   // ASCII byte from roi_capture
@@ -46,7 +50,12 @@ module control_uart (
   reg uart_send_active;
   reg [4:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
-  reg       dump_mode;
+  reg       nn_wait_mode;
+  reg       score_mode;
+  reg       score_start_phase;
+  reg [3:0] score_class_idx;
+  reg [2:0] score_bit_idx;
+  reg       score_sep_phase;
 
   // Format: "T:X X:XXX Y:XXX S:X\n" (hex values, 20 bytes)
   function [7:0] hex_char;
@@ -61,8 +70,35 @@ module control_uart (
     (roi_size_sel == 2'd1) ? 8'h4D :  // 'M'
                              8'h4C;   // 'L'
 
+  function [5:0] class_score;
+    input [59:0] packed_scores;
+    input [3:0] class_idx;
+    begin
+      case (class_idx)
+        4'd0: class_score = packed_scores[5:0];
+        4'd1: class_score = packed_scores[11:6];
+        4'd2: class_score = packed_scores[17:12];
+        4'd3: class_score = packed_scores[23:18];
+        4'd4: class_score = packed_scores[29:24];
+        4'd5: class_score = packed_scores[35:30];
+        4'd6: class_score = packed_scores[41:36];
+        4'd7: class_score = packed_scores[47:42];
+        4'd8: class_score = packed_scores[53:48];
+        4'd9: class_score = packed_scores[59:54];
+        default: class_score = 6'd0;
+      endcase
+    end
+  endfunction
+
+  wire [5:0] score_word = class_score(nn_scores, score_class_idx);
+  wire score_bit = score_word[score_bit_idx];
+  wire [7:0] score_tx_byte =
+    score_start_phase ? 8'h21 :
+    score_sep_phase ? ((score_class_idx == 4'd9) ? 8'h0A : 8'h20) :
+                      (score_bit ? 8'h31 : 8'h30);
+
   assign uart_tx_din =
-    dump_mode             ? roi_dump_o_byte :                  // ROI dump byte
+    score_mode            ? score_tx_byte :
     (uart_msg_idx == 5'd0)  ? 8'h54 :                          // 'T'
     (uart_msg_idx == 5'd1)  ? 8'h3A :                          // ':'
     (uart_msg_idx == 5'd2)  ? hex_char(threshold_wdata) :      // threshold hex
@@ -84,10 +120,10 @@ module control_uart (
     (uart_msg_idx == 5'd18) ? tx_size_char :                   // size char
                               8'h0A;                           // '\n'
 
-  // dump takes priority; suppress status TX while dumping
-  assign roi_dump_o_ready = dump_mode && !uart_tx_busy;
+  // raw ROI dump is disabled; c now triggers neural inference output
+  assign roi_dump_o_ready = 1'b0;
   assign uart_tx_wr = !uart_tx_busy &&
-                      (dump_mode ? roi_dump_o_valid : uart_send_active);
+                      (score_mode || uart_send_active);
 
   uart_rx #(
     .CLK_FREQ(25000000),
@@ -123,15 +159,46 @@ module control_uart (
       roi_cx <= 10'd320;
       roi_cy <= 9'd240;
       label_idx <= 4'd0;
-      dump_mode <= 1'b0;
+      nn_start <= 1'b0;
+      nn_wait_mode <= 1'b0;
+      score_mode <= 1'b0;
+      score_start_phase <= 1'b0;
+      score_class_idx <= 4'd0;
+      score_bit_idx <= 3'd5;
+      score_sep_phase <= 1'b0;
       roi_dump <= 1'b0;
     end else begin
       threshold_wr <= 1'b0;
+      nn_start <= 1'b0;
       roi_dump <= 1'b0;
 
-      // Clear dump_mode when the last ASCII byte of the dump is accepted.
-      if (roi_dump_o_valid && roi_dump_o_ready && roi_dump_o_last) begin
-        dump_mode <= 1'b0;
+      if (nn_done && nn_wait_mode) begin
+        nn_wait_mode <= 1'b0;
+        score_mode <= 1'b1;
+        score_start_phase <= 1'b1;
+        score_class_idx <= 4'd0;
+        score_bit_idx <= 3'd5;
+        score_sep_phase <= 1'b0;
+      end
+
+      if (score_mode && !uart_tx_busy) begin
+        if (score_start_phase) begin
+          score_start_phase <= 1'b0;
+        end else if (!score_sep_phase) begin
+          if (score_bit_idx == 3'd0) begin
+            score_sep_phase <= 1'b1;
+          end else begin
+            score_bit_idx <= score_bit_idx - 3'd1;
+          end
+        end else begin
+          if (score_class_idx == 4'd9) begin
+            score_mode <= 1'b0;
+          end else begin
+            score_class_idx <= score_class_idx + 4'd1;
+            score_bit_idx <= 3'd5;
+            score_sep_phase <= 1'b0;
+          end
+        end
       end
 
       if (uart_rx_valid) begin
@@ -175,10 +242,10 @@ module control_uart (
               uart_msg_idx <= 5'd0;
             end
           end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
-            // 'C' or 'c': trigger ROI capture dump over UART
-            if (!dump_mode) begin
-              roi_dump  <= 1'b1;
-              dump_mode <= 1'b1;
+            // 'C' or 'c': run neural inference and print 10x6-bit class scores.
+            if (!nn_wait_mode && !score_mode) begin
+              nn_start <= 1'b1;
+              nn_wait_mode <= 1'b1;
             end
           end else if ((uart_rx_data >= 8'h30) && (uart_rx_data <= 8'h39)) begin
             label_idx <= uart_rx_data - 8'h30;
@@ -242,7 +309,7 @@ module control_uart (
         roi_cy <= rect_cy_max;
       end
 
-      if (uart_send_active && !uart_tx_busy && !dump_mode) begin
+      if (uart_send_active && !uart_tx_busy && !score_mode) begin
         if (uart_msg_idx == 5'd19) begin
           uart_send_active <= 1'b0;
         end else begin

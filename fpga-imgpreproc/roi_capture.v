@@ -62,6 +62,7 @@ module roi_capture #(
   input  wire       dump,           // 1-cycle pulse: start a dump
 
   // ASCII dump output stream (ctrl_clk domain)
+  output wire [783:0] roi_bits,
   output reg        dump_o_valid,
   output reg  [7:0] dump_o_byte,
   output reg        dump_o_last,    // asserted with the final '\n'
@@ -188,6 +189,13 @@ module roi_capture #(
     rd_data_0 <= roi_buf[rd_byte_addr][rd_bit_addr];
     rd_data_1 <= rd_data_0;
   end
+
+  genvar g_roi_bit;
+  generate
+    for (g_roi_bit = 0; g_roi_bit < 784; g_roi_bit = g_roi_bit + 1) begin : gen_roi_bits
+      assign roi_bits[g_roi_bit] = roi_buf[g_roi_bit >> 3][g_roi_bit[2:0]];
+    end
+  endgenerate
 
   always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
     if (!ctrl_rst_n) begin
