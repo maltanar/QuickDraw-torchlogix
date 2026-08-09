@@ -377,7 +377,7 @@ class QuickDrawSimulator(QMainWindow):
         self.uart_terminal.add_output("QuickDraw FPGA Simulator\n", "green")
         self.uart_terminal.add_output("Click 'Initialize Simulation' to start.\n", "green")
         self.uart_terminal.add_output("Keys: ←→↑↓=move ROI  S/M/L=size  +/-=threshold  ?=status\n", "green")
-        self.uart_terminal.add_output("Press c to run inference and print integer class scores.\n", "green")
+        self.uart_terminal.add_output("Press c to run inference and print integer argmax class index.\n", "green")
 
         # UART score-frame parser state. Score frames start with '!' and end with '\n'.
         self._uart_score_mode = False
@@ -452,6 +452,8 @@ class QuickDrawSimulator(QMainWindow):
                 values.append(str(int(tok, 10)))
             else:
                 return f"!{score_payload}\n"
+        if len(values) == 1:
+            return "!" + values[0] + "\n"
         return "! " + " ".join(values) + "\n"
     
     def _on_scale_changed(self, value):

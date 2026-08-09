@@ -51,6 +51,8 @@ wire [3:0] label_idx;
 wire nn_start;
 wire nn_done;
 wire [59:0] nn_scores;
+wire nn_best_valid;
+wire [3:0] nn_best_idx;
 
 wire roi_dump;
   wire roi_dump_o_valid;
@@ -69,8 +71,8 @@ wire roi_dump;
     .roi_cy(roi_cy),
     .label_idx(label_idx),
     .nn_start(nn_start),
-    .nn_done(nn_done),
-    .nn_scores(nn_scores),
+    .nn_best_valid(nn_best_valid),
+    .nn_best_idx(nn_best_idx),
     .roi_dump(roi_dump),
     .roi_dump_o_valid(roi_dump_o_valid),
     .roi_dump_o_byte(roi_dump_o_byte),
@@ -176,6 +178,15 @@ threshold_stream threshold_stream_i (
     .roi_bits(roi_bits),
     .done(nn_done),
     .scores(nn_scores)
+  );
+
+  score_argmax10 score_argmax10_i (
+    .clk(clk_25MHz),
+    .rst_n(resetn),
+    .in_valid(nn_done),
+    .scores(nn_scores),
+    .out_valid(nn_best_valid),
+    .max_idx(nn_best_idx)
   );
 
   // ---------------------------------------------------------------------------
