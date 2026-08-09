@@ -12,6 +12,7 @@ module control_uart (
   output reg [3:0]  label_idx,
 
   output reg        nn_start,
+  input  wire       nn_done,
   input  wire       nn_best_valid,
   input  wire [3:0] nn_best_idx,
 
@@ -50,9 +51,11 @@ module control_uart (
   reg uart_send_active;
   reg [4:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
+  reg       nn_started;
   reg       nn_wait_mode;
   reg       idx_mode;
   reg [1:0] idx_tx_phase;
+  reg [3:0] idx_tx_value;
 
   // Format: "T:X X:XXX Y:XXX S:X\n" (hex values, 20 bytes)
   function [7:0] hex_char;
@@ -69,7 +72,7 @@ module control_uart (
 
   wire [7:0] idx_tx_byte =
     (idx_tx_phase == 2'd0) ? 8'h21 :                    // '!'
-    (idx_tx_phase == 2'd1) ? (8'h30 + {4'b0000, nn_best_idx}) :
+    (idx_tx_phase == 2'd1) ? (8'h30 + {4'b0000, idx_tx_value}) :
                              8'h0A;                     // '\n'
 
   assign uart_tx_din =
@@ -135,20 +138,34 @@ module control_uart (
       roi_cy <= 9'd240;
       label_idx <= 4'd0;
       nn_start <= 1'b0;
+      nn_started <= 1'b0;
       nn_wait_mode <= 1'b0;
       idx_mode <= 1'b0;
       idx_tx_phase <= 2'd0;
+      idx_tx_value <= 4'd0;
       roi_dump <= 1'b0;
     end else begin
       threshold_wr <= 1'b0;
       nn_start <= 1'b0;
       roi_dump <= 1'b0;
 
-      if (nn_best_valid && nn_wait_mode) begin
-        nn_wait_mode <= 1'b0;
+      // Keep neural inference running continuously.
+      if (!nn_started) begin
+        nn_start <= 1'b1;
+        nn_started <= 1'b1;
+      end else if (nn_done) begin
+        nn_start <= 1'b1;
+      end
+
+      if (nn_best_valid) begin
+        // Always render the most recent argmax class in the ROI overlay.
         label_idx <= nn_best_idx;
-        idx_mode <= 1'b1;
-        idx_tx_phase <= 2'd0;
+        if (nn_wait_mode) begin
+          nn_wait_mode <= 1'b0;
+          idx_mode <= 1'b1;
+          idx_tx_phase <= 2'd0;
+          idx_tx_value <= nn_best_idx;
+        end
       end
 
       if (idx_mode && !uart_tx_busy) begin
@@ -200,9 +217,8 @@ module control_uart (
               uart_msg_idx <= 5'd0;
             end
           end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
-            // 'C' or 'c': run neural inference and print argmax class index.
+            // 'C' or 'c': print argmax class index on next valid inference result.
             if (!nn_wait_mode && !idx_mode) begin
-              nn_start <= 1'b1;
               nn_wait_mode <= 1'b1;
             end
           end else if ((uart_rx_data >= 8'h30) && (uart_rx_data <= 8'h39)) begin

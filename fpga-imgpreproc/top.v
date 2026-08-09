@@ -71,6 +71,7 @@ wire roi_dump;
     .roi_cy(roi_cy),
     .label_idx(label_idx),
     .nn_start(nn_start),
+    .nn_done(nn_done),
     .nn_best_valid(nn_best_valid),
     .nn_best_idx(nn_best_idx),
     .roi_dump(roi_dump),
