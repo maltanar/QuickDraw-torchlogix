@@ -352,11 +352,11 @@ module renderer (
     end
   endfunction
 
-  // Asymmetric VGA half-extents so the on-screen box encloses a square
-  // region of camera pixels (vga_half_x = cam_half*4, vga_half_y = cam_half*2)
+  // Isotropic VGA half-extents for 2x2 display mapping.
+  // This keeps the on-screen ROI square while matching camera-space ROI.
   wire [9:0] rect_half_x_next =
-    (roi_size_sel == 2'd0) ? 10'd56  :
-    (roi_size_sel == 2'd1) ? 10'd112 : 10'd224;
+    (roi_size_sel == 2'd0) ? 10'd28  :
+    (roi_size_sel == 2'd1) ? 10'd56  : 10'd112;
   wire [8:0] rect_half_y_next =
     (roi_size_sel == 2'd0) ? 9'd28 :
     (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
@@ -373,13 +373,15 @@ module renderer (
   wire [8:0] rect_top    = rect_top_r;
   wire [8:0] rect_bottom = rect_bottom_r;
 
-  wire [9:0] vga_x = {2'b00, s_x} << 2;
-  wire [8:0] vga_y = (9'd255 - {1'b0, s_y}) << 1;
+  wire x_in_view = (s_x >= 8'd8) && (s_x <= 8'd247);
+  wire y_in_view = (s_y >= 8'd8) && (s_y <= 8'd247);
+  wire [9:0] vga_x = x_in_view ? ((({2'b00, s_x} - 10'd8) << 1) + 10'd80) : 10'd0;
+  wire [8:0] vga_y = y_in_view ? ((9'd247 - {1'b0, s_y}) << 1) : 9'd0;
 
-  // Each capture pixel covers a 4x2 region in VGA space. Use overlap tests
+  // Each capture pixel covers a 2x2 region in VGA space. Use overlap tests
   // against that cell so ROI edges are not dropped between sample points.
   wire [9:0] cell_x0 = vga_x;
-  wire [9:0] cell_x1 = vga_x + 10'd3;
+  wire [9:0] cell_x1 = vga_x + 10'd1;
   wire [8:0] cell_y0 = vga_y;
   wire [8:0] cell_y1 = vga_y + 9'd1;
 
@@ -402,12 +404,12 @@ module renderer (
 
   wire draw_border = on_left_edge || on_right_edge || on_top_edge || on_bottom_edge;
 
-  // Text rasterization runs at logical pixel rate (each logical pixel is 4x2 VGA px).
+  // Text rasterization runs at logical pixel rate (each logical pixel is 2x2 VGA px).
   // Sampling the font at this grid avoids dotted/striped aliasing.
   wire [9:0] text_x0 = text_x0_r;
   wire [8:0] text_y0 = text_y0_r;
   wire [7:0] text_w_cells = ({4'd0, MAX_NAME_LEN} * {5'd0, GLYPH_ADV});
-  wire [9:0] text_rel_x_cells_full = (vga_x - text_x0) >> 2;
+  wire [9:0] text_rel_x_cells_full = (vga_x - text_x0) >> 1;
   wire [8:0] text_rel_y_cells_full = (vga_y - text_y0) >> 1;
   wire [7:0] text_rel_x_cells = text_rel_x_cells_full[7:0];
   wire [7:0] text_rel_y_cells = text_rel_y_cells_full[7:0];
@@ -482,7 +484,7 @@ module renderer (
       rect_right_r <= roi_cx + rect_half_x_next - 10'd1;
       rect_top_r <= roi_cy - rect_half_y_next;
       rect_bottom_r <= roi_cy + rect_half_y_next - 9'd1;
-      text_x0_r <= ((roi_cx - rect_half_x_next) + TEXT_X_OFF + 10'd3) & 10'h3FC;
+      text_x0_r <= ((roi_cx - rect_half_x_next) + TEXT_X_OFF + 10'd1) & 10'h3FE;
       text_y0_r <= ((roi_cy - rect_half_y_next) + TEXT_Y_OFF + 9'd1) & 9'h1FE;
 
       p_valid <= s_valid;

@@ -10,17 +10,17 @@
 //   data_clk  – camera pixel clock (cam_PCLK), drives the capture write port
 //   ctrl_clk  – 25 MHz system clock, drives the dump FSM and output stream
 //
-// ROI coordinate mapping (matches renderer.v)
-//   vga_x = cam_x * 4        =>  cam_x = vga_x >> 2
-//   vga_y = (255-cam_y) * 2  =>  cam_y = 255 - (vga_y >> 1)
+// ROI coordinate mapping (matches renderer.v / vga_scanout.v)
+//   vga_x = 80 + (cam_x-8)*2   => cam_x = 8 + ((vga_x-80) >> 1)
+//   vga_y = (247-cam_y)*2      => cam_y = 247 - (vga_y >> 1)
 //
 // Square ROI sizes in camera-pixel space (exact multiples of 28 → no
 // fractional arithmetic needed for nearest-neighbour downsampling):
 //
 //   roi_size_sel  cam_half  cam size   NN step  VGA box (W×H)
-//       0  (S)      14      28 × 28       1      112 × 56
-//       1  (M)      28      56 × 56       2      224 × 112
-//       2  (L)      56     112 × 112      4      448 × 224
+//       0  (S)      14      28 × 28       1       56 × 56
+//       1  (M)      28      56 × 56       2      112 × 112
+//       2  (L)      56     112 × 112      4      224 × 224
 //
 // Buffer layout: address = cell_y * 28 + cell_x  (784 bits = 98 bytes)
 
@@ -81,16 +81,17 @@ module roi_capture #(
   // =========================================================================
   // ROI boundary computation (combinational)
   // =========================================================================
-  // Square ROI: separate VGA half-extents in x (×4) and y (×2) so that the
-  // captured region is cam_half × cam_half camera pixels.
+  // Square ROI in an isotropic 2x2 VGA mapping so that the captured
+  // region is cam_half × cam_half camera pixels.
 
   wire [6:0] cam_half =
     (roi_size_sel == 2'd0) ? 7'd14 :
     (roi_size_sel == 2'd1) ? 7'd28 : 7'd56;
 
-  // Camera-space centre derived from VGA coordinates
-  wire [7:0] cam_cx = roi_cx[9:2];            // roi_cx / 4
-  wire [7:0] cam_cy = 8'd255 - roi_cy[8:1];  // 255 - roi_cy / 2
+  // Camera-space centre derived from square viewport VGA coordinates.
+  wire [9:0] roi_x_shift = (roi_cx - 10'd80) >> 1;
+  wire [7:0] cam_cx = 8'd8 + roi_x_shift[7:0];
+  wire [7:0] cam_cy = 8'd247 - roi_cy[8:1];
 
   wire [7:0] roi_cam_x_min = cam_cx - {1'b0, cam_half};
   wire [7:0] roi_cam_x_max = cam_cx + {1'b0, cam_half} - 8'd1;
