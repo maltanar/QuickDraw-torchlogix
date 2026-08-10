@@ -198,10 +198,11 @@ threshold_stream threshold_stream_i (
   wire cap_rmono;
 
   capture_buffer capture_buffer_i (
-    .wclk(cam_PCLK),
-    .we(mono_axis_valid_out),
-    .waddr({mono_axis_y_out, mono_axis_x_out}),
-    .wmono(mono_axis_pixel_out),
+  .wclk(cam_PCLK),
+  .we(mono_axis_valid_out),
+  .waddr({mono_axis_y_out, mono_axis_x_out}),
+  .wmono(mono_axis_pixel_out),
+  .rclk(clk_25MHz),
   .re(cap_re),
   .raddr(cap_raddr),
   .rmono(cap_rmono)
