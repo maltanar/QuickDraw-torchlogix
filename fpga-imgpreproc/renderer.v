@@ -354,17 +354,24 @@ module renderer (
 
   // Asymmetric VGA half-extents so the on-screen box encloses a square
   // region of camera pixels (vga_half_x = cam_half*4, vga_half_y = cam_half*2)
-  wire [9:0] rect_half_x =
+  wire [9:0] rect_half_x_next =
     (roi_size_sel == 2'd0) ? 10'd56  :
     (roi_size_sel == 2'd1) ? 10'd112 : 10'd224;
-  wire [8:0] rect_half_y =
+  wire [8:0] rect_half_y_next =
     (roi_size_sel == 2'd0) ? 9'd28 :
     (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
 
-  wire [9:0] rect_left   = roi_cx - rect_half_x;
-  wire [9:0] rect_right  = roi_cx + rect_half_x - 10'd1;
-  wire [8:0] rect_top    = roi_cy - rect_half_y;
-  wire [8:0] rect_bottom = roi_cy + rect_half_y - 9'd1;
+  reg [9:0] rect_left_r;
+  reg [9:0] rect_right_r;
+  reg [8:0] rect_top_r;
+  reg [8:0] rect_bottom_r;
+  reg [9:0] text_x0_r;
+  reg [8:0] text_y0_r;
+
+  wire [9:0] rect_left   = rect_left_r;
+  wire [9:0] rect_right  = rect_right_r;
+  wire [8:0] rect_top    = rect_top_r;
+  wire [8:0] rect_bottom = rect_bottom_r;
 
   wire [9:0] vga_x = {2'b00, s_x} << 2;
   wire [8:0] vga_y = (9'd255 - {1'b0, s_y}) << 1;
@@ -397,8 +404,8 @@ module renderer (
 
   // Text rasterization runs at logical pixel rate (each logical pixel is 4x2 VGA px).
   // Sampling the font at this grid avoids dotted/striped aliasing.
-  wire [9:0] text_x0 = (rect_left + TEXT_X_OFF + 10'd3) & 10'h3FC; // align to 4 px
-  wire [8:0] text_y0 = (rect_top + TEXT_Y_OFF + 9'd1) & 9'h1FE;    // align to 2 px
+  wire [9:0] text_x0 = text_x0_r;
+  wire [8:0] text_y0 = text_y0_r;
   wire [7:0] text_w_cells = ({4'd0, MAX_NAME_LEN} * {5'd0, GLYPH_ADV});
   wire [9:0] text_rel_x_cells_full = (vga_x - text_x0) >> 2;
   wire [8:0] text_rel_y_cells_full = (vga_y - text_y0) >> 1;
@@ -410,31 +417,89 @@ module renderer (
     (text_rel_x_cells < text_w_cells) &&
     (text_rel_y_cells < {5'd0, GLYPH_H});
 
-  wire [7:0] text_char_idx_full = text_rel_x_cells / 8'd5;
-  wire [7:0] text_col_full = text_rel_x_cells % 8'd5;
+  // Exact for 0..54 (the valid text cell range): floor(x/5) = (x*13)>>6.
+  // Gate with text_in_bounds so out-of-range values do not matter.
+  wire [7:0] text_rel_x_cells_active = text_in_bounds ? text_rel_x_cells : 8'd0;
+  wire [11:0] text_mul13 =
+    ({4'd0, text_rel_x_cells_active} << 3) +
+    ({4'd0, text_rel_x_cells_active} << 2) +
+    {4'd0, text_rel_x_cells_active};
+  wire [7:0] text_char_idx_full = text_mul13[11:6];
+  wire [7:0] text_col_full =
+    text_rel_x_cells_active - ((text_char_idx_full << 2) + text_char_idx_full);
   wire [3:0] text_char_idx = text_char_idx_full[3:0];
   wire [2:0] text_col = text_col_full[2:0];
   wire [1:0] text_row = text_rel_y_cells[1:0];
   wire text_col_is_glyph = (text_col < GLYPH_W);
-  wire [7:0] text_char = class_char(label_idx, text_char_idx);
-  wire [3:0] text_row_bits = font4x4_row(text_char, text_row);
-  wire text_pixel = text_in_bounds && text_col_is_glyph && (text_char != 8'h20) &&
-                    text_row_bits[3 - text_col[1:0]];
 
-  wire [3:0] bw_level = s_mono ? 4'hF : 4'h0;
-  wire [11:0] mono_rgb = {bw_level, bw_level, bw_level};
+  // Pipeline stage to break the long path through ROI math -> text decode -> color mux.
+  reg        p_valid;
+  reg  [7:0] p_x;
+  reg  [7:0] p_y;
+  reg        p_mono;
+  reg        p_draw_border;
+  reg        p_text_in_bounds;
+  reg        p_text_col_is_glyph;
+  reg  [3:0] p_text_char_idx;
+  reg  [2:0] p_text_col;
+  reg  [1:0] p_text_row;
+  reg  [3:0] p_label_idx;
 
-  wire [11:0] out_rgb = draw_border ? 12'hF00 : (text_pixel ? 12'h0F0 : mono_rgb);
+  wire [7:0] p_text_char = class_char(p_label_idx, p_text_char_idx);
+  wire [3:0] p_text_row_bits = font4x4_row(p_text_char, p_text_row);
+  wire p_text_pixel = p_text_in_bounds && p_text_col_is_glyph && (p_text_char != 8'h20) &&
+                      p_text_row_bits[3 - p_text_col[1:0]];
+
+  wire [3:0] p_bw_level = p_mono ? 4'hF : 4'h0;
+  wire [11:0] p_mono_rgb = {p_bw_level, p_bw_level, p_bw_level};
+  wire [11:0] p_out_rgb = p_draw_border ? 12'hF00 : (p_text_pixel ? 12'h0F0 : p_mono_rgb);
 
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
+      rect_left_r <= 10'd0;
+      rect_right_r <= 10'd0;
+      rect_top_r <= 9'd0;
+      rect_bottom_r <= 9'd0;
+      text_x0_r <= 10'd0;
+      text_y0_r <= 9'd0;
+
+      p_valid <= 1'b0;
+      p_x <= 8'd0;
+      p_y <= 8'd0;
+      p_mono <= 1'b0;
+      p_draw_border <= 1'b0;
+      p_text_in_bounds <= 1'b0;
+      p_text_col_is_glyph <= 1'b0;
+      p_text_char_idx <= 4'd0;
+      p_text_col <= 3'd0;
+      p_text_row <= 2'd0;
+      p_label_idx <= 4'd0;
       m_we    <= 1'b0;
       m_waddr <= 16'd0;
       m_rgb444 <= 12'h000;
     end else begin
-      m_we    <= s_valid;
-      m_waddr <= {s_y, s_x};
-      m_rgb444 <= out_rgb;
+      rect_left_r <= roi_cx - rect_half_x_next;
+      rect_right_r <= roi_cx + rect_half_x_next - 10'd1;
+      rect_top_r <= roi_cy - rect_half_y_next;
+      rect_bottom_r <= roi_cy + rect_half_y_next - 9'd1;
+      text_x0_r <= ((roi_cx - rect_half_x_next) + TEXT_X_OFF + 10'd3) & 10'h3FC;
+      text_y0_r <= ((roi_cy - rect_half_y_next) + TEXT_Y_OFF + 9'd1) & 9'h1FE;
+
+      p_valid <= s_valid;
+      p_x <= s_x;
+      p_y <= s_y;
+      p_mono <= s_mono;
+      p_draw_border <= draw_border;
+      p_text_in_bounds <= text_in_bounds;
+      p_text_col_is_glyph <= text_col_is_glyph;
+      p_text_char_idx <= text_char_idx;
+      p_text_col <= text_col;
+      p_text_row <= text_row;
+      p_label_idx <= label_idx;
+
+      m_we    <= p_valid;
+      m_waddr <= {p_y, p_x};
+      m_rgb444 <= p_out_rgb;
     end
   end
 
