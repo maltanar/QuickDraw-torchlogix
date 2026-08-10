@@ -23,3 +23,16 @@ VERILOG_FILES := \
     gatemate_25MHz_pll.v \
 
 include makefile.inc
+
+.PHONY: synth_module_reports
+
+synth_module_reports: $(BOARD).vh $(VERILOG_FILES)
+	@echo "Generating hierarchical synthesis JSON"
+	@$(YOSYS) -ql synth_hier.log -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $(BOARD).vh $(VERILOG_FILES); $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP) -noflatten -noiopad -json $(TEST_CASE)_hier.json'
+	@$(YOSYS) -Q -p 'read_json $(TEST_CASE)_hier.json; tee -o $(TEST_CASE)_stat_hier.json stat -json -hierarchy'
+	@echo "Generating flattened synthesis JSON with scoped instance names"
+	@$(MAKE) --no-print-directory json BOARD=$(BOARD) SCOPENAME=1
+	@$(YOSYS) -Q -p 'read_json $(TEST_CASE).json; tee -o $(TEST_CASE)_stat_flat.json stat -json'
+	@echo "count,instance_path" > $(TEST_CASE)_instance_group.csv
+	@grep -o '\\top[/.][^ ]*' $(TEST_CASE)_ys.v | sed 's/^\\//' | sed 's/\./\//g' | awk -F/ 'NF >= 2 {print $$1 "/" $$2}' | sort | uniq -c | awk '{print $$1 "," $$2}' >> $(TEST_CASE)_instance_group.csv
+	@echo "Wrote $(TEST_CASE)_stat_hier.json, $(TEST_CASE)_stat_flat.json, $(TEST_CASE)_instance_group.csv"
