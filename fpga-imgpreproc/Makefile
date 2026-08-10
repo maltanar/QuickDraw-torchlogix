@@ -14,6 +14,7 @@ VERILOG_FILES := \
     control_uart.v \
 	camera_configure.v \
     camera_read.v \
+    score_argmax10.v \
     hvsync_generator.v \
     OV7670_config_rom.v \
     OV7670_config.v \
