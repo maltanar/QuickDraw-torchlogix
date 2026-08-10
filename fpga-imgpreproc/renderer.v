@@ -25,6 +25,7 @@ module renderer (
   localparam [2:0] GLYPH_W = 3'd4;
   localparam [2:0] GLYPH_H = 3'd4;
   localparam [2:0] GLYPH_ADV = 3'd5;
+  localparam [9:0] TEXT_BLOCK_H = 10'd8;
 
   function [3:0] font4x4_row;
     input [7:0] ch;
@@ -368,6 +369,11 @@ module renderer (
   reg [9:0] text_x0_r;
   reg [8:0] text_y0_r;
 
+  wire [9:0] text_left_next = roi_cx - rect_half_x_next;
+  wire [8:0] text_top_next =
+    (roi_cy > ({1'b0, rect_half_y_next} + TEXT_BLOCK_H + TEXT_Y_OFF[8:0])) ?
+      (roi_cy - rect_half_y_next - TEXT_BLOCK_H - TEXT_Y_OFF[8:0]) : 9'd0;
+
   wire [9:0] rect_left   = rect_left_r;
   wire [9:0] rect_right  = rect_right_r;
   wire [8:0] rect_top    = rect_top_r;
@@ -484,8 +490,8 @@ module renderer (
       rect_right_r <= roi_cx + rect_half_x_next - 10'd1;
       rect_top_r <= roi_cy - rect_half_y_next;
       rect_bottom_r <= roi_cy + rect_half_y_next - 9'd1;
-      text_x0_r <= ((roi_cx - rect_half_x_next) + TEXT_X_OFF + 10'd1) & 10'h3FE;
-      text_y0_r <= ((roi_cy - rect_half_y_next) + TEXT_Y_OFF + 9'd1) & 9'h1FE;
+      text_x0_r <= (text_left_next + TEXT_X_OFF + 10'd1) & 10'h3FE;
+      text_y0_r <= (text_top_next + 9'd1) & 9'h1FE;
 
       p_valid <= s_valid;
       p_x <= s_x;
