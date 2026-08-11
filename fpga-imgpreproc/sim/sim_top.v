@@ -180,9 +180,9 @@ module sim_top (
   // ---------------------------------------------------------------------------
   // Datapath stage 3: capture buffer write (camera clock) and read (25 MHz).
   // ---------------------------------------------------------------------------
-  wire cap_re;
-  wire [15:0] cap_raddr;
   wire cap_rmono;
+  wire [15:0] vga_rd_addr;
+  wire scan_pix_valid;
 
   capture_buffer capture_buffer_i (
     .wclk(sim_cam_pclk),
@@ -190,74 +190,57 @@ module sim_top (
     .waddr({mono_axis_y_out, mono_axis_x_out}),
     .wmono(mono_axis_pixel_out),
     .rclk(clk_25MHz),
-    .re(cap_re),
-    .raddr(cap_raddr),
+    .re(1'b1),
+    .raddr(vga_rd_addr),
     .rmono(cap_rmono)
   );
 
-  wire cap_stream_valid;
-  wire cap_stream_tlast;
-  wire cap_stream_mono;
-  wire [7:0] cap_stream_x;
-  wire [7:0] cap_stream_y;
+  reg scan_pix_valid_d;
+  reg [7:0] scan_x_d;
+  reg [7:0] scan_y_d;
 
-  capture_reader capture_reader_i (
-    .clk(clk_25MHz),
-    .rst_n(rst_n),
-    .cap_re(cap_re),
-    .cap_raddr(cap_raddr),
-    .cap_rmono(cap_rmono),
-    .m_valid(cap_stream_valid),
-    .m_tlast(cap_stream_tlast),
-    .m_mono(cap_stream_mono),
-    .m_x(cap_stream_x),
-    .m_y(cap_stream_y)
-  );
+  always @(posedge clk_25MHz or negedge rst_n) begin
+    if (!rst_n) begin
+      scan_pix_valid_d <= 1'b0;
+      scan_x_d <= 8'd0;
+      scan_y_d <= 8'd0;
+    end else begin
+      scan_pix_valid_d <= scan_pix_valid;
+      scan_x_d <= vga_rd_addr[7:0];
+      scan_y_d <= vga_rd_addr[15:8];
+    end
+  end
 
   // ---------------------------------------------------------------------------
   // Datapath stage 4: renderer overlays ROI border + green label text.
   // ---------------------------------------------------------------------------
-  wire vga_wr_en;
-  wire [15:0] vga_wr_addr;
-  wire [11:0] vga_wr_pixel;
+  wire [11:0] vga_pix_rgb;
 
   renderer renderer_i (
     .clk(clk_25MHz),
     .rst_n(rst_n),
-    .s_valid(cap_stream_valid),
-    .s_mono(cap_stream_mono),
-    .s_tlast(cap_stream_tlast),
-    .s_x(cap_stream_x),
-    .s_y(cap_stream_y),
+    .s_valid(scan_pix_valid_d),
+    .s_mono(cap_rmono),
+    .s_tlast(1'b0),
+    .s_x(scan_x_d),
+    .s_y(scan_y_d),
     .roi_cx(roi_cx),
     .roi_cy(roi_cy),
     .roi_size_sel(roi_size_sel),
     .label_idx(label_idx),
-    .m_we(vga_wr_en),
-    .m_waddr(vga_wr_addr),
-    .m_rgb444(vga_wr_pixel)
+    .m_we(),
+    .m_waddr(),
+    .m_rgb444(vga_pix_rgb)
   );
 
   // ---------------------------------------------------------------------------
-  // Datapath stage 5: VGA buffer + scanout.
+  // Datapath stage 5: direct scanout (no intermediate RGB frame buffer).
   // ---------------------------------------------------------------------------
-  wire [15:0] vga_rd_addr;
-  wire [11:0] vga_rd_pixel;
-
-  vgabuff vga_buffer_i (
-    .clk(clk_25MHz),
-    .raddr(vga_rd_addr),
-    .waddr(vga_wr_addr),
-    .we(vga_wr_en),
-    .pixout(vga_wr_pixel),
-    .rclk(clk_25MHz),
-    .pixin(vga_rd_pixel)
-  );
-
   sim_vga_output vga_scanout_i (
     .clk_25mhz(clk_25MHz),
-    .pix_in(vga_rd_pixel),
+    .pix_in(vga_pix_rgb),
     .pix_addr(vga_rd_addr),
+    .pix_req_valid(scan_pix_valid),
     .in_display(sim_vga_in_display),
     .vga_hsync(sim_vga_hsync),
     .vga_vsync(sim_vga_vsync),

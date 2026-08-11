@@ -20,8 +20,9 @@ import numpy as np
 from pathlib import Path
 from typing import Optional, Dict
 
-# Maximum possible pixels in a 16-bit VGA buffer address space
-_MAX_VGA_PIXELS = 160 * 256
+# Maximum possible pixels returned by sw_get_vga_frame().
+# Addresses are 16-bit framebuffer indices, so worst-case frame size is 65536.
+_MAX_VGA_PIXELS = 1 << 16
 
 
 class VerilatorSimulator:
