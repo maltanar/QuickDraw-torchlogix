@@ -413,12 +413,11 @@ module renderer (
   wire [9:0] text_rel_x_cells_full = (vga_x - text_x0);
   wire [8:0] text_rel_y_cells_full = (vga_y - text_y0);
   wire [7:0] text_rel_x_cells = text_rel_x_cells_full[7:0];
-  wire [7:0] text_rel_y_cells = text_rel_y_cells_full[7:0];
   wire text_in_bounds =
     (vga_x >= text_x0) &&
     (vga_y >= text_y0) &&
-    (text_rel_x_cells < text_w_cells) &&
-    (text_rel_y_cells < {5'd0, GLYPH_H});
+    (text_rel_x_cells_full < {2'd0, text_w_cells}) &&
+    (text_rel_y_cells_full < {6'd0, GLYPH_H});
 
   // Exact for 0..54 (the valid text cell range): floor(x/5) = (x*13)>>6.
   // Gate with text_in_bounds so out-of-range values do not matter.
@@ -432,7 +431,7 @@ module renderer (
     text_rel_x_cells_active - ((text_char_idx_full << 2) + text_char_idx_full);
   wire [3:0] text_char_idx = text_char_idx_full[3:0];
   wire [2:0] text_col = text_col_full[2:0];
-  wire [1:0] text_row = text_rel_y_cells[1:0];
+  wire [1:0] text_row = text_rel_y_cells_full[1:0];
   wire text_col_is_glyph = (text_col < GLYPH_W);
 
   // Pipeline stage to break the long path through ROI math -> text decode -> color mux.
