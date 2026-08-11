@@ -5,8 +5,8 @@ module renderer (
   input  wire       s_valid,
   input  wire       s_mono,
   input  wire       s_tlast,
-  input  wire [7:0] s_x,
-  input  wire [7:0] s_y,
+  input  wire [9:0] s_x,
+  input  wire [8:0] s_y,
 
   input  wire [9:0] roi_cx,
   input  wire [8:0] roi_cy,
@@ -14,7 +14,7 @@ module renderer (
   input  wire [3:0] label_idx,
 
   output reg        m_we,
-  output reg [15:0] m_waddr,
+  output reg [18:0] m_waddr,
   output reg [11:0] m_rgb444
 );
 
@@ -353,14 +353,13 @@ module renderer (
     end
   endfunction
 
-  // Isotropic VGA half-extents for 2x2 display mapping.
-  // This keeps the on-screen ROI square while matching camera-space ROI.
+  // 1:1 VGA/camera mapping keeps ROI square with symmetric half-extents.
   wire [9:0] rect_half_x_next =
-    (roi_size_sel == 2'd0) ? 10'd28  :
-    (roi_size_sel == 2'd1) ? 10'd56  : 10'd112;
+    (roi_size_sel == 2'd0) ? 10'd14  :
+    (roi_size_sel == 2'd1) ? 10'd28  : 10'd56;
   wire [8:0] rect_half_y_next =
-    (roi_size_sel == 2'd0) ? 9'd28 :
-    (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
+    (roi_size_sel == 2'd0) ? 9'd14 :
+    (roi_size_sel == 2'd1) ? 9'd28  : 9'd56;
 
   reg [9:0] rect_left_r;
   reg [9:0] rect_right_r;
@@ -379,17 +378,14 @@ module renderer (
   wire [8:0] rect_top    = rect_top_r;
   wire [8:0] rect_bottom = rect_bottom_r;
 
-  wire x_in_view = (s_x >= 8'd8) && (s_x <= 8'd247);
-  wire y_in_view = (s_y >= 8'd8) && (s_y <= 8'd247);
-  wire [9:0] vga_x = x_in_view ? ((({2'b00, s_x} - 10'd8) << 1) + 10'd80) : 10'd0;
-  wire [8:0] vga_y = y_in_view ? ((9'd247 - {1'b0, s_y}) << 1) : 9'd0;
+  wire [9:0] vga_x = s_x;
+  wire [8:0] vga_y = s_y;
 
-  // Each capture pixel covers a 2x2 region in VGA space. Use overlap tests
-  // against that cell so ROI edges are not dropped between sample points.
+  // 1:1 pixel mapping between captured mono stream and VGA space.
   wire [9:0] cell_x0 = vga_x;
-  wire [9:0] cell_x1 = vga_x + 10'd1;
+  wire [9:0] cell_x1 = vga_x;
   wire [8:0] cell_y0 = vga_y;
-  wire [8:0] cell_y1 = vga_y + 9'd1;
+  wire [8:0] cell_y1 = vga_y;
 
   wire [9:0] rect_left_edge_hi = rect_left + BORDER_THICK - 10'd1;
   wire [9:0] rect_right_edge_lo = rect_right - BORDER_THICK + 10'd1;
@@ -410,13 +406,12 @@ module renderer (
 
   wire draw_border = on_left_edge || on_right_edge || on_top_edge || on_bottom_edge;
 
-  // Text rasterization runs at logical pixel rate (each logical pixel is 2x2 VGA px).
-  // Sampling the font at this grid avoids dotted/striped aliasing.
+  // Text rasterization in 1:1 VGA pixels.
   wire [9:0] text_x0 = text_x0_r;
   wire [8:0] text_y0 = text_y0_r;
   wire [7:0] text_w_cells = ({4'd0, MAX_NAME_LEN} * {5'd0, GLYPH_ADV});
-  wire [9:0] text_rel_x_cells_full = (vga_x - text_x0) >> 1;
-  wire [8:0] text_rel_y_cells_full = (vga_y - text_y0) >> 1;
+  wire [9:0] text_rel_x_cells_full = (vga_x - text_x0);
+  wire [8:0] text_rel_y_cells_full = (vga_y - text_y0);
   wire [7:0] text_rel_x_cells = text_rel_x_cells_full[7:0];
   wire [7:0] text_rel_y_cells = text_rel_y_cells_full[7:0];
   wire text_in_bounds =
@@ -442,8 +437,8 @@ module renderer (
 
   // Pipeline stage to break the long path through ROI math -> text decode -> color mux.
   reg        p_valid;
-  reg  [7:0] p_x;
-  reg  [7:0] p_y;
+  reg  [9:0] p_x;
+  reg  [8:0] p_y;
   reg        p_mono;
   reg        p_draw_border;
   reg        p_text_in_bounds;
@@ -472,8 +467,8 @@ module renderer (
       text_y0_r <= 9'd0;
 
       p_valid <= 1'b0;
-      p_x <= 8'd0;
-      p_y <= 8'd0;
+      p_x <= 10'd0;
+      p_y <= 9'd0;
       p_mono <= 1'b0;
       p_draw_border <= 1'b0;
       p_text_in_bounds <= 1'b0;
@@ -483,15 +478,15 @@ module renderer (
       p_text_row <= 2'd0;
       p_label_idx <= 4'd0;
       m_we    <= 1'b0;
-      m_waddr <= 16'd0;
+      m_waddr <= 19'd0;
       m_rgb444 <= 12'h000;
     end else begin
       rect_left_r <= roi_cx - rect_half_x_next;
       rect_right_r <= roi_cx + rect_half_x_next - 10'd1;
       rect_top_r <= roi_cy - rect_half_y_next;
       rect_bottom_r <= roi_cy + rect_half_y_next - 9'd1;
-      text_x0_r <= (text_left_next + TEXT_X_OFF + 10'd1) & 10'h3FE;
-      text_y0_r <= (text_top_next + 9'd1) & 9'h1FE;
+      text_x0_r <= text_left_next + TEXT_X_OFF;
+      text_y0_r <= text_top_next;
 
       p_valid <= s_valid;
       p_x <= s_x;
@@ -506,7 +501,7 @@ module renderer (
       p_label_idx <= label_idx;
 
       m_we    <= p_valid;
-      m_waddr <= {p_y, p_x};
+      m_waddr <= ({10'd0, p_y} << 9) + ({10'd0, p_y} << 7) + p_x;
       m_rgb444 <= p_out_rgb;
     end
   end

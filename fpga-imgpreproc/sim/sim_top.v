@@ -14,7 +14,7 @@ module sim_top (
   output wire [3:0] sim_vga_r,
   output wire [3:0] sim_vga_g,
   output wire [3:0] sim_vga_b,
-  output wire [15:0] sim_vga_pix_addr,
+  output wire [18:0] sim_vga_pix_addr,
   output wire        sim_vga_in_display
 );
 
@@ -75,8 +75,8 @@ module sim_top (
   wire cam_axis_valid;
   wire [11:0] cam_axis_rgb444;
   wire cam_axis_tlast;
-  wire [7:0] cam_axis_x;
-  wire [7:0] cam_axis_y;
+  wire [9:0] cam_axis_x;
+  wire [8:0] cam_axis_y;
 
   sim_camera_source camera_axis_source_i (
     .cam_pclk(sim_cam_pclk),
@@ -98,8 +98,8 @@ module sim_top (
   wire mono_axis_valid;
   wire mono_axis_pixel;
   wire mono_axis_tlast;
-  wire [7:0] mono_axis_x;
-  wire [7:0] mono_axis_y;
+  wire [9:0] mono_axis_x;
+  wire [8:0] mono_axis_y;
 
   threshold_stream threshold_stream_i (
     .cfg_clk(clk_25MHz),
@@ -128,8 +128,8 @@ module sim_top (
   wire mono_axis_valid_out;
   wire mono_axis_pixel_out;
   wire mono_axis_tlast_out;
-  wire [7:0] mono_axis_x_out;
-  wire [7:0] mono_axis_y_out;
+  wire [9:0] mono_axis_x_out;
+  wire [8:0] mono_axis_y_out;
   wire [783:0] roi_bits;
   wire roi_dump_o_ready;
 
@@ -181,13 +181,15 @@ module sim_top (
   // Datapath stage 3: capture buffer write (camera clock) and read (25 MHz).
   // ---------------------------------------------------------------------------
   wire cap_rmono;
-  wire [15:0] vga_rd_addr;
+  wire [18:0] vga_rd_addr;
+  wire [9:0] vga_scan_x;
+  wire [8:0] vga_scan_y;
   wire scan_pix_valid;
 
   capture_buffer capture_buffer_i (
     .wclk(sim_cam_pclk),
     .we(mono_axis_valid_out),
-    .waddr({mono_axis_y_out, mono_axis_x_out}),
+    .waddr((({10'd0, mono_axis_y_out} << 9) + ({10'd0, mono_axis_y_out} << 7) + mono_axis_x_out)),
     .wmono(mono_axis_pixel_out),
     .rclk(clk_25MHz),
     .re(1'b1),
@@ -196,18 +198,18 @@ module sim_top (
   );
 
   reg scan_pix_valid_d;
-  reg [7:0] scan_x_d;
-  reg [7:0] scan_y_d;
+  reg [9:0] scan_x_d;
+  reg [8:0] scan_y_d;
 
   always @(posedge clk_25MHz or negedge rst_n) begin
     if (!rst_n) begin
       scan_pix_valid_d <= 1'b0;
-      scan_x_d <= 8'd0;
-      scan_y_d <= 8'd0;
+      scan_x_d <= 10'd0;
+      scan_y_d <= 9'd0;
     end else begin
       scan_pix_valid_d <= scan_pix_valid;
-      scan_x_d <= vga_rd_addr[7:0];
-      scan_y_d <= vga_rd_addr[15:8];
+      scan_x_d <= vga_scan_x;
+      scan_y_d <= vga_scan_y;
     end
   end
 
@@ -240,6 +242,8 @@ module sim_top (
     .clk_25mhz(clk_25MHz),
     .pix_in(vga_pix_rgb),
     .pix_addr(vga_rd_addr),
+    .pix_x(vga_scan_x),
+    .pix_y(vga_scan_y),
     .pix_req_valid(scan_pix_valid),
     .in_display(sim_vga_in_display),
     .vga_hsync(sim_vga_hsync),

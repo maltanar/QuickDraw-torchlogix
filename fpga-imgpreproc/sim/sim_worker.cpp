@@ -23,6 +23,9 @@
 // Constants
 // ============================================================
 static const int BAUD_CYCLES = 217;   // 25 MHz / 115200 baud
+static const int VGA_W = 640;
+static const int VGA_H = 480;
+static const int VGA_PIXELS = VGA_W * VGA_H;
 
 // ============================================================
 // Enums
@@ -82,8 +85,8 @@ struct Sim {
     std::vector<uint8_t> tx_decoded;
 
     // --- VGA output sampler ---
-    // Flat array indexed by 16-bit VGA buffer address; -1 = no pixel written yet
-    int32_t    vga_current[65536];
+    // Flat array indexed by linear VGA address (0..640*480-1); -1 = empty
+    int32_t    vga_current[VGA_PIXELS];
     int        vga_current_count;
     int        vga_last_vsync;
     int        vga_frames_received;
@@ -285,15 +288,17 @@ static void sample_vga(Sim* s) {
         uint32_t rgb444 = ((uint32_t)s->top->sim_vga_r << 8) |
                           ((uint32_t)s->top->sim_vga_g << 4) |
                            (uint32_t)s->top->sim_vga_b;
-        if (s->vga_current[addr] < 0) s->vga_current_count++;
-        s->vga_current[addr] = (int32_t)rgb444;
+        if (addr < (uint32_t)VGA_PIXELS) {
+            if (s->vga_current[addr] < 0) s->vga_current_count++;
+            s->vga_current[addr] = (int32_t)rgb444;
+        }
     }
 
     int vsync = (int)s->top->sim_vga_vsync;
     if (vsync == 0 && s->vga_last_vsync == 1 && s->vga_current_count > 0) {
         s->vga_addrs.clear();
         s->vga_rgb444.clear();
-        for (int a = 0; a < 65536; a++) {
+        for (int a = 0; a < VGA_PIXELS; a++) {
             if (s->vga_current[a] >= 0) {
                 s->vga_addrs.push_back((uint32_t)a);
                 s->vga_rgb444.push_back((uint32_t)s->vga_current[a]);

@@ -23,21 +23,20 @@ module control_uart (
   output wire       roi_dump_o_ready   // we can accept a byte
 );
 
-  localparam [9:0] VIEW_X0 = 10'd80;
-  localparam [9:0] VIEW_W = 10'd480;
+  localparam [9:0] VIEW_X0 = 10'd0;
+  localparam [9:0] VIEW_W = 10'd640;
   localparam [8:0] VIEW_Y0 = 9'd0;
   localparam [8:0] VIEW_H = 9'd480;
   localparam [9:0] MOVE_STEP_X = 10'd4;
   localparam [8:0] MOVE_STEP_Y = 9'd4;
 
-  // Isotropic VGA half-extents for square camera-pixel ROI in 2x2 mapping
-  // (vga_half_x = cam_half*2, vga_half_y = cam_half*2)
+  // 1:1 VGA/camera mapping, square half-extents in pixels.
   wire [9:0] rect_half_x =
-    (roi_size_sel == 2'd0) ? 10'd28  :
-    (roi_size_sel == 2'd1) ? 10'd56  : 10'd112;
+    (roi_size_sel == 2'd0) ? 10'd14  :
+    (roi_size_sel == 2'd1) ? 10'd28  : 10'd56;
   wire [8:0] rect_half_y =
-    (roi_size_sel == 2'd0) ? 9'd28 :
-    (roi_size_sel == 2'd1) ? 9'd56  : 9'd112;
+    (roi_size_sel == 2'd0) ? 9'd14 :
+    (roi_size_sel == 2'd1) ? 9'd28  : 9'd56;
 
   wire [9:0] rect_cx_min = VIEW_X0 + rect_half_x;
   wire [9:0] rect_cx_max = VIEW_X0 + VIEW_W - rect_half_x;

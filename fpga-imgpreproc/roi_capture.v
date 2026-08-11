@@ -11,16 +11,16 @@
 //   ctrl_clk  – 25 MHz system clock, drives the dump FSM and output stream
 //
 // ROI coordinate mapping (matches renderer.v / vga_scanout.v)
-//   vga_x = 80 + (cam_x-8)*2   => cam_x = 8 + ((vga_x-80) >> 1)
-//   vga_y = (247-cam_y)*2      => cam_y = 247 - (vga_y >> 1)
+//   vga_x = cam_x
+//   vga_y = cam_y
 //
 // Square ROI sizes in camera-pixel space (exact multiples of 28 → no
 // fractional arithmetic needed for nearest-neighbour downsampling):
 //
 //   roi_size_sel  cam_half  cam size   NN step  VGA box (W×H)
-//       0  (S)      14      28 × 28       1       56 × 56
-//       1  (M)      28      56 × 56       2      112 × 112
-//       2  (L)      56     112 × 112      4      224 × 224
+//       0  (S)      14      28 × 28       1       28 × 28
+//       1  (M)      28      56 × 56       2       56 × 56
+//       2  (L)      56     112 × 112      4      112 × 112
 //
 // Buffer layout: address = cell_y * 28 + cell_x  (784 bits = 98 bytes)
 
@@ -37,15 +37,15 @@ module roi_capture #(
   input  wire       s_valid,
   input  wire       s_pixel,
   input  wire       s_tlast,
-  input  wire [7:0] s_x,
-  input  wire [7:0] s_y,
+  input  wire [9:0] s_x,
+  input  wire [8:0] s_y,
 
   // Pass-through stream output (data_clk domain, wired straight through)
   output wire       m_valid,
   output wire       m_pixel,
   output wire       m_tlast,
-  output wire [7:0] m_x,
-  output wire [7:0] m_y,
+  output wire [9:0] m_x,
+  output wire [8:0] m_y,
 
   // -------------------------------------------------------------------
   // ROI configuration (quasi-static, from ctrl_clk domain)
@@ -81,22 +81,19 @@ module roi_capture #(
   // =========================================================================
   // ROI boundary computation (combinational)
   // =========================================================================
-  // Square ROI in an isotropic 2x2 VGA mapping so that the captured
-  // region is cam_half × cam_half camera pixels.
+  // Square ROI in 1:1 camera/VGA mapping.
 
   wire [6:0] cam_half =
     (roi_size_sel == 2'd0) ? 7'd14 :
     (roi_size_sel == 2'd1) ? 7'd28 : 7'd56;
 
-  // Camera-space centre derived from square viewport VGA coordinates.
-  wire [9:0] roi_x_shift = (roi_cx - 10'd80) >> 1;
-  wire [7:0] cam_cx = 8'd8 + roi_x_shift[7:0];
-  wire [7:0] cam_cy = 8'd247 - roi_cy[8:1];
+  wire [9:0] cam_cx = roi_cx;
+  wire [8:0] cam_cy = roi_cy;
 
-  wire [7:0] roi_cam_x_min = cam_cx - {1'b0, cam_half};
-  wire [7:0] roi_cam_x_max = cam_cx + {1'b0, cam_half} - 8'd1;
-  wire [7:0] roi_cam_y_min = cam_cy - {1'b0, cam_half};
-  wire [7:0] roi_cam_y_max = cam_cy + {1'b0, cam_half} - 8'd1;
+  wire [9:0] roi_cam_x_min = cam_cx - {3'b000, cam_half};
+  wire [9:0] roi_cam_x_max = cam_cx + {3'b000, cam_half} - 10'd1;
+  wire [8:0] roi_cam_y_min = cam_cy - {2'b00, cam_half};
+  wire [8:0] roi_cam_y_max = cam_cy + {2'b00, cam_half} - 9'd1;
 
   // =========================================================================
   // Nearest-neighbour capture – data_clk domain
@@ -105,8 +102,8 @@ module roi_capture #(
                   && (s_x >= roi_cam_x_min) && (s_x <= roi_cam_x_max)
                   && (s_y >= roi_cam_y_min) && (s_y <= roi_cam_y_max);
 
-  wire [7:0] rel_x = s_x - roi_cam_x_min;
-  wire [7:0] rel_y = s_y - roi_cam_y_min;
+  wire [9:0] rel_x = s_x - roi_cam_x_min;
+  wire [8:0] rel_y = s_y - roi_cam_y_min;
 
   // Only sample at the top-left corner of each output cell.
   // S: every pixel (step=1), M: every 2nd (step=2), L: every 4th (step=4)
