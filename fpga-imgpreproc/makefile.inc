@@ -14,6 +14,23 @@ GMPACK = gmpack
 GMUNPACK = gmunpack
 EQY_CLOCK = async2sync
 SCOPENAME ?=
+BUILD_DIR ?= $(abspath $(ROOT_DIR)/../build/fpga-imgpreproc)
+
+SYNTH_LOG := $(BUILD_DIR)/synth.log
+SYNTH_V := $(BUILD_DIR)/$(TEST_CASE)_synth.v
+JSON_FILE := $(BUILD_DIR)/$(TEST_CASE).json
+YS_V := $(BUILD_DIR)/$(TEST_CASE)_ys.v
+CFG_FILE := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD)_00.cfg
+CFG_BASE := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD)
+PR_TXT_FILE := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD)_00.txt
+NEXTPNR_TXT := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD).txt
+PNR_JSON := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD)_pnr.json
+SDF_FILE := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD).sdf
+BIT_FILE := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD).bit
+PNR_V := $(BUILD_DIR)/$(TEST_CASE)_$(BOARD)_pnr.v
+CHECK_YOSYS_EQY := $(BUILD_DIR)/check_yosys.eqy
+CHECK_PNR_EQY := $(BUILD_DIR)/check_pnr.eqy
+CHECK_PNR_POST_EQY := $(BUILD_DIR)/check_pnr_post.eqy
 
 define check_cc_tool
   $(if $(CC_TOOL), \
@@ -75,71 +92,74 @@ all:
 	@echo " - post - generate post pnr verilog netlist by nextpnr"
 	@exit
 
-synth: $(TEST_CASE)_synth.v
-json: $(TEST_CASE).json
+$(BUILD_DIR):
+	@mkdir -p $@
 
-$(TEST_CASE)_synth.v: $(BOARD).vh $(VERILOG_FILES)
+synth: $(SYNTH_V)
+json: $(JSON_FILE)
+
+$(SYNTH_V): $(BOARD).vh $(VERILOG_FILES) | $(BUILD_DIR)
 	@echo "Running Yosys"
-	@$(YOSYS) -ql synth.log -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -top $(TOP) -nomx8 -vlog $(TEST_CASE)_synth.v'
+	@$(YOSYS) -ql $(SYNTH_LOG) -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -top $(TOP) -nomx8 -vlog $(SYNTH_V)'
 
-$(TEST_CASE).json $(TEST_CASE)_ys.v: $(BOARD).vh $(VERILOG_FILES)
+$(JSON_FILE) $(YS_V): $(BOARD).vh $(VERILOG_FILES) | $(BUILD_DIR)
 	@echo "Running Yosys"
 ifneq ($(strip $(SCOPENAME)),)
-	@$(YOSYS) -ql synth.log -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP) -noflatten -noiopad; flatten -scopename; synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP); write_json $(TEST_CASE).json; write_verilog -norename -noattr $(TEST_CASE)_ys.v'
+	@$(YOSYS) -ql $(SYNTH_LOG) -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP) -noflatten -noiopad; flatten -scopename; synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP); write_json $(JSON_FILE); write_verilog -norename -noattr $(YS_V)'
 else
-	@$(YOSYS) -ql synth.log -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP) -json $(TEST_CASE).json; write_verilog -norename -noattr $(TEST_CASE)_ys.v'
+	@$(YOSYS) -ql $(SYNTH_LOG) -p '$(YOSYS_DEFS_OPT) read_verilog -defer -sv $^; $(YOSYS_CMDS) synth_gatemate $(YOSYS_PARAM) -luttree -top $(TOP) -json $(JSON_FILE); write_verilog -norename -noattr $(YS_V)'
 endif
 
-$(TEST_CASE)_$(BOARD)_00.cfg: $(TEST_CASE)_synth.v $(BOARD).ccf
+$(CFG_FILE): $(SYNTH_V) $(BOARD).ccf | $(BUILD_DIR)
 	$(call check_cc_tool)
 	@echo "Running P_R for '$(BOARD)' board"
-	@$(P_R) -i $(TEST_CASE)_synth.v ${PR_OPTS} -cCP -pr -ccf $(BOARD).ccf -o $(TEST_CASE)_$(BOARD)
+	@$(P_R) -i $(SYNTH_V) ${PR_OPTS} -cCP -pr -ccf $(BOARD).ccf -o $(CFG_BASE)
 
-$(TEST_CASE)_$(BOARD).txt $(TEST_CASE)_$(BOARD)_pnr.json: $(TEST_CASE).json $(BOARD).ccf
+$(NEXTPNR_TXT) $(PNR_JSON): $(JSON_FILE) $(BOARD).ccf | $(BUILD_DIR)
 	@echo "Running nextpnr for '$(BOARD)' board"
-	$(NEXTPNR) --device $(FPGA) --json $(TEST_CASE).json --vopt ccf=$(BOARD).ccf --vopt out=$(TEST_CASE)_$(BOARD).txt --router router2 --freq $(FREQ) $(SEED_OPT) $(SDC_OPT) --write $(TEST_CASE)_$(BOARD)_pnr.json --sdf $(TEST_CASE)_$(BOARD).sdf --placer-heap-beta 0.5 --vopt time_mode=typical $(NEXTPNR_PARAMS)
+	$(NEXTPNR) --device $(FPGA) --json $(JSON_FILE) --vopt ccf=$(BOARD).ccf --vopt out=$(NEXTPNR_TXT) --router router2 --freq $(FREQ) $(SEED_OPT) $(SDC_OPT) --write $(PNR_JSON) --sdf $(SDF_FILE) --placer-heap-beta 0.5 --vopt time_mode=typical $(NEXTPNR_PARAMS)
 
-$(TEST_CASE)_$(BOARD)_00.txt: $(TEST_CASE)_$(BOARD)_00.cfg
+$(PR_TXT_FILE): $(CFG_FILE) | $(BUILD_DIR)
 	@echo "Running unpack for '$(BOARD)' board"
-	@$(GMUNPACK) $(TEST_CASE)_$(BOARD)_00.cfg.bit $(TEST_CASE)_$(BOARD)_00.txt
+	@$(GMUNPACK) $(CFG_FILE).bit $(PR_TXT_FILE)
 
-pr: $(TEST_CASE)_$(BOARD)_00.cfg
+pr: $(CFG_FILE)
 
-unpack: $(TEST_CASE)_$(BOARD)_00.txt
+unpack: $(PR_TXT_FILE)
 
-nextpnr: $(TEST_CASE)_$(BOARD).txt
+nextpnr: $(NEXTPNR_TXT)
 
-post: $(TEST_CASE)_$(BOARD)_pnr.v
+post: $(PNR_V)
 
-jtag_pr: $(TEST_CASE)_$(BOARD)_00.cfg
+jtag_pr: $(CFG_FILE)
 	@echo "Running openFPGALoader for '$(BOARD)' board"
 	@$(OFL) $(OFL_BOARD) --index-chain 0 $^
 
-jtag: $(TEST_CASE)_$(BOARD).txt
+jtag: $(NEXTPNR_TXT)
 	@echo "Running openFPGALoader for '$(BOARD)' board"
-	@$(GMPACK) $(TEST_CASE)_$(BOARD).txt $(TEST_CASE)_$(BOARD).bit
-	@$(OFL) $(OFL_BOARD) --index-chain 0 $(TEST_CASE)_$(BOARD).bit
+	@$(GMPACK) $(NEXTPNR_TXT) $(BIT_FILE)
+	@$(OFL) $(OFL_BOARD) --index-chain 0 $(BIT_FILE)
 
-$(TEST_CASE)_$(BOARD)_pnr.v: $(TEST_CASE)_$(BOARD).txt
+$(PNR_V): $(NEXTPNR_TXT) | $(BUILD_DIR)
 	@echo "Generate post PnR Verilog netlist"
-	@$(YOSYS) -q -p 'read_json $(TEST_CASE)_$(BOARD)_pnr.json; write_verilog -norename -noattr $(TEST_CASE)_$(BOARD)_pnr.v'
+	@$(YOSYS) -q -p 'read_json $(PNR_JSON); write_verilog -norename -noattr $(PNR_V)'
 
 firmware: $(FIRMWARE)
 	@echo "Running openFPGALoader to program '$(FIRMWARE)' on '$(BOARD)' board"
 	@$(OFL) $(OFL_BOARD) --index-chain 0 -f -o 1048576 $(FIRMWARE)
 
 clean:
-	@rm -rf *.log *_synth.v *.history *.txt *.refwire *.refparam *_ys.v
-	@rm -rf *.refcomp *.pos *.pathes *.path_struc *.net *.id *.prn
-	@rm -rf *_00.v *.used *.sdf *.place *.pin *.cfg *.bit  *.cdf *.idh *.min *.json
-	@rm -rf *_pnr.v check_yosys check_yosys.eqy check_pnr check_pnr.eqy check_pnr_post check_pnr_post.eqy
+	@rm -rf $(BUILD_DIR)
+	@rm -rf *.history *.refwire *.refparam *.refcomp *.pos *.pathes *.path_struc *.net *.id *.prn
+	@rm -rf *_00.v *.used *.place *.pin *.cdf *.idh *.min check_yosys check_pnr check_pnr_post
 
 force-nextpnr:
-	$(NEXTPNR) --device $(FPGA) --json $(TEST_CASE).json --vopt ccf=$(BOARD).ccf --vopt out=../logs/$(TEST_CASE)_$(BOARD)_$(SEED).txt --router router2 --freq $(FREQ) $(SEED_OPT) $(SDC_OPT) --placer-heap-beta 0.5 --vopt time_mode=typical $(NEXTPNR_PARAMS)
+	@mkdir -p $(BUILD_DIR)/logs
+	$(NEXTPNR) --device $(FPGA) --json $(JSON_FILE) --vopt ccf=$(BOARD).ccf --vopt out=$(BUILD_DIR)/logs/$(TEST_CASE)_$(BOARD)_$(SEED).txt --router router2 --freq $(FREQ) $(SEED_OPT) $(SDC_OPT) --placer-heap-beta 0.5 --vopt time_mode=typical $(NEXTPNR_PARAMS)
 
 .PHONY: synth json pr nextpnr force-nextpnr jtag_pr jtag unpack check_yosys check_pnr check_pnr_post
 
-check_yosys.eqy: $(TEST_CASE)_ys.v $(BOARD).vh $(VERILOG_FILES)
+$(CHECK_YOSYS_EQY): $(YS_V) $(BOARD).vh $(VERILOG_FILES) | $(BUILD_DIR)
 	@echo "Generang EQY file"
 	@{ \
 	  echo "[gold]"; \
@@ -155,7 +175,7 @@ check_yosys.eqy: $(TEST_CASE)_ys.v $(BOARD).vh $(VERILOG_FILES)
 	  echo "[gate]"; \
 	  echo "$(YOSYS_DEFS_OPT)"; \
 	  echo "read_verilog -nowb -noblackbox +/gatemate/cells_sim.v ../cells_extra.v"; \
-	  echo "read_verilog $(TEST_CASE)_ys.v"; \
+	  echo "read_verilog $(YS_V)"; \
 	  echo "prep -top $(TOP)"; \
 	  echo "flatten";\
 	  echo "$(EQY_CLOCK)";\
@@ -169,10 +189,10 @@ check_yosys.eqy: $(TEST_CASE)_ys.v $(BOARD).vh $(VERILOG_FILES)
 	  echo "engine abc scorr; pdr"; \
 	} > $@
 
-check_yosys: check_yosys.eqy
+check_yosys: $(CHECK_YOSYS_EQY)
 	@eqy -f $^
 
-check_pnr.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(VERILOG_FILES)
+$(CHECK_PNR_EQY): $(PNR_V) $(BOARD).vh $(VERILOG_FILES) | $(BUILD_DIR)
 	@echo "Generating EQY file"
 	@{ \
 	  echo "[gold]"; \
@@ -188,7 +208,7 @@ check_pnr.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(VERILOG_FILES)
 	  echo "[gate]"; \
 	  echo "$(YOSYS_DEFS_OPT)"; \
 	  echo "read_verilog -nowb -noblackbox +/gatemate/cells_sim.v ../cpesim.v"; \
-	  echo "read_verilog $(TEST_CASE)_$(BOARD)_pnr.v"; \
+	  echo "read_verilog $(PNR_V)"; \
 	  echo "rename top $(TOP)";\
 	  echo "prep -top $(TOP)"; \
 	  echo "flatten";\
@@ -203,16 +223,16 @@ check_pnr.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(VERILOG_FILES)
 	  echo "engine abc scorr; pdr"; \
 	} > $@
 
-check_pnr: check_pnr.eqy
+check_pnr: $(CHECK_PNR_EQY)
 	@eqy -f $^
 
-check_pnr_post.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(TEST_CASE)_ys.v
+$(CHECK_PNR_POST_EQY): $(PNR_V) $(BOARD).vh $(YS_V) | $(BUILD_DIR)
 	@echo "Generating EQY file"
 	@{ \
 	  echo "[gold]"; \
 	  echo "$(YOSYS_DEFS_OPT)"; \
 	  echo "read_verilog -nowb -noblackbox +/gatemate/cells_sim.v ../cells_extra.v"; \
-	  echo "read_verilog $(TEST_CASE)_ys.v"; \
+	  echo "read_verilog $(YS_V)"; \
 	  echo "prep -top $(TOP)"; \
 	  echo "flatten";\
 	  echo "$(EQY_CLOCK)";\
@@ -221,7 +241,7 @@ check_pnr_post.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(TEST_CASE)_ys.v
 	  echo "[gate]"; \
 	  echo "$(YOSYS_DEFS_OPT)"; \
 	  echo "read_verilog -nowb -noblackbox +/gatemate/cells_sim.v ../cpesim.v"; \
-	  echo "read_verilog $(TEST_CASE)_$(BOARD)_pnr.v"; \
+	  echo "read_verilog $(PNR_V)"; \
 	  echo "rename top $(TOP)";\
 	  echo "prep -top $(TOP)"; \
 	  echo "flatten";\
@@ -236,5 +256,5 @@ check_pnr_post.eqy: $(TEST_CASE)_$(BOARD)_pnr.v $(BOARD).vh $(TEST_CASE)_ys.v
 	  echo "engine abc scorr; pdr"; \
 	} > $@
 
-check_pnr_post: check_pnr_post.eqy
+check_pnr_post: $(CHECK_PNR_POST_EQY)
 	@eqy -f $^

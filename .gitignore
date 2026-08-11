@@ -79,3 +79,16 @@ fpga/build.lut8/
 fpga-imgpreproc/build_sim_verilator/
 fpga-imgpreproc/build/
 fpga-imgpreproc/sim_trace.vcd
+
+# FPGA image preproc generated synthesis/PnR artifacts (kept under build/)
+fpga-imgpreproc/*.json
+fpga-imgpreproc/*_instance_group.csv
+fpga-imgpreproc/*_ys.v
+fpga-imgpreproc/*_synth.v
+fpga-imgpreproc/*_pnr.v
+fpga-imgpreproc/*.sdf
+fpga-imgpreproc/*.bit
+fpga-imgpreproc/*.cfg
+fpga-imgpreproc/*.txt
+fpga-imgpreproc/synth.log
+fpga-imgpreproc/sim/build_worker/
