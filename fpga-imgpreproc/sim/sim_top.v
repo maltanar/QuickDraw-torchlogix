@@ -38,6 +38,7 @@ module sim_top (
   wire nn_start;
   wire nn_done;
   wire [59:0] nn_scores;
+  wire [783:0] nn_input_dbg;
   wire nn_best_valid;
   wire [3:0] nn_best_idx;
 
@@ -59,6 +60,7 @@ module sim_top (
     .label_idx(label_idx),
     .nn_start(nn_start),
     .nn_done(nn_done),
+    .nn_input_bits(nn_input_dbg),
     .nn_best_valid(nn_best_valid),
     .nn_best_idx(nn_best_idx),
     .roi_dump(roi_dump),
@@ -133,7 +135,9 @@ module sim_top (
   wire [783:0] roi_bits;
   wire roi_dump_o_ready;
 
-  roi_capture roi_capture_i (
+  roi_capture #(
+    .VFLIP(0)
+  ) roi_capture_i (
     .data_clk(sim_cam_pclk),
     .data_rst_n(rst_n),
     .s_valid(mono_axis_valid),
@@ -164,6 +168,7 @@ module sim_top (
     .rst_n(rst_n),
     .start(nn_start),
     .roi_bits(roi_bits),
+    .nn_input_dbg(nn_input_dbg),
     .done(nn_done),
     .scores(nn_scores)
   );

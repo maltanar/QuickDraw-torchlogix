@@ -7,6 +7,7 @@ module roi_inferencer #(
   input  wire         rst_n,
   input  wire         start,
   input  wire [783:0] roi_bits,
+  output wire [783:0] nn_input_dbg,
   output reg          done,
   output reg  [59:0]  scores
 );
@@ -16,6 +17,8 @@ module roi_inferencer #(
 
   reg       busy;
   reg [3:0] wait_ctr;
+
+  assign nn_input_dbg = nn_input;
 
   neuralut neuralut_i (
     .M0(nn_input),

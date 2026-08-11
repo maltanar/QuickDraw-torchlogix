@@ -13,6 +13,7 @@ module control_uart (
 
   output reg        nn_start,
   input  wire       nn_done,
+  input  wire [783:0] nn_input_bits,
   input  wire       nn_best_valid,
   input  wire [3:0] nn_best_idx,
 
@@ -53,10 +54,12 @@ module control_uart (
   reg [5:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
   reg       nn_started;
-  reg       nn_wait_mode;
-  reg       idx_mode;
-  reg [1:0] idx_tx_phase;
-  reg [3:0] idx_tx_value;
+  reg       dump_active;
+  reg       dump_send_cr;
+  reg       dump_send_nl;
+  reg [4:0] dump_row;
+  reg [4:0] dump_col;
+  reg [783:0] dump_snapshot;
 
   // Format: "T:X X:XXX Y:XXX S:X\n" (19 bytes)
   function [7:0] hex_char;
@@ -71,13 +74,12 @@ module control_uart (
     (roi_size_sel == 2'd1) ? 8'h4D :  // 'M'
                              8'h4C;   // 'L'
 
-  wire [7:0] idx_tx_byte =
-    (idx_tx_phase == 2'd0) ? 8'h21 :                    // '!'
-    (idx_tx_phase == 2'd1) ? (8'h30 + {4'b0000, idx_tx_value}) :
-                             8'h0A;                     // '\n'
+  wire [9:0] dump_bit_idx =
+    ({5'd0, dump_row} << 5) - ({5'd0, dump_row} << 2) + {5'd0, dump_col};
+  wire dump_bit = dump_snapshot[dump_bit_idx];
 
   assign uart_tx_din =
-    idx_mode              ? idx_tx_byte :
+    dump_active           ? (dump_send_cr ? 8'h0D : (dump_send_nl ? 8'h0A : (dump_bit ? 8'h31 : 8'h30))) :
     (uart_msg_idx == 5'd0)  ? 8'h54 :                          // 'T'
     (uart_msg_idx == 5'd1)  ? 8'h3A :                          // ':'
     (uart_msg_idx == 5'd2)  ? hex_char(threshold_wdata) :      // threshold hex
@@ -99,10 +101,10 @@ module control_uart (
     (uart_msg_idx == 6'd18) ? tx_size_char :                   // size char
             8'h0A;                           // '\n'
 
-  // raw ROI dump is disabled; c now triggers neural inference output
+  // External ROI dumper is unused; c-command dump is generated locally.
   assign roi_dump_o_ready = 1'b0;
   assign uart_tx_wr = !uart_tx_busy &&
-                      (idx_mode || uart_send_active);
+                      (dump_active || uart_send_active);
 
   uart_rx #(
     .CLK_FREQ(25000000),
@@ -140,11 +142,13 @@ module control_uart (
       label_idx <= 4'd0;
       nn_start <= 1'b0;
       nn_started <= 1'b0;
-      nn_wait_mode <= 1'b0;
-      idx_mode <= 1'b0;
-      idx_tx_phase <= 2'd0;
-      idx_tx_value <= 4'd0;
       roi_dump <= 1'b0;
+      dump_active <= 1'b0;
+      dump_send_cr <= 1'b0;
+      dump_send_nl <= 1'b0;
+      dump_row <= 5'd0;
+      dump_col <= 5'd0;
+      dump_snapshot <= 784'd0;
     end else begin
       threshold_wr <= 1'b0;
       nn_start <= 1'b0;
@@ -161,19 +165,26 @@ module control_uart (
       if (nn_best_valid) begin
         // Always render the most recent argmax class in the ROI overlay.
         label_idx <= nn_best_idx;
-        if (nn_wait_mode) begin
-          nn_wait_mode <= 1'b0;
-          idx_mode <= 1'b1;
-          idx_tx_phase <= 2'd0;
-          idx_tx_value <= nn_best_idx;
-        end
       end
 
-      if (idx_mode && !uart_tx_busy) begin
-        if (idx_tx_phase == 2'd2) begin
-          idx_mode <= 1'b0;
+      if (dump_active && !uart_tx_busy) begin
+        if (dump_send_cr) begin
+          dump_send_cr <= 1'b0;
+          dump_send_nl <= 1'b1;
+        end else if (dump_send_nl) begin
+          if (dump_row == 5'd27) begin
+            dump_active <= 1'b0;
+          end else begin
+            dump_row <= dump_row + 5'd1;
+            dump_col <= 5'd0;
+            dump_send_nl <= 1'b0;
+          end
         end else begin
-          idx_tx_phase <= idx_tx_phase + 2'd1;
+          if (dump_col == 5'd27) begin
+            dump_send_cr <= 1'b1;
+          end else begin
+            dump_col <= dump_col + 5'd1;
+          end
         end
       end
 
@@ -218,9 +229,14 @@ module control_uart (
               uart_msg_idx <= 6'd0;
             end
           end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
-            // 'C' or 'c': print argmax class index on next valid inference result.
-            if (!nn_wait_mode && !idx_mode) begin
-              nn_wait_mode <= 1'b1;
+            // 'C' or 'c': dump the latched 784-bit NN input as 28x28 ASCII.
+            if (!uart_send_active && !dump_active) begin
+              dump_snapshot <= nn_input_bits;
+              dump_active <= 1'b1;
+              dump_send_cr <= 1'b0;
+              dump_send_nl <= 1'b0;
+              dump_row <= 5'd0;
+              dump_col <= 5'd0;
             end
           end else if ((uart_rx_data >= 8'h30) && (uart_rx_data <= 8'h39)) begin
             label_idx <= uart_rx_data - 8'h30;
@@ -284,8 +300,8 @@ module control_uart (
         roi_cy <= rect_cy_max;
       end
 
-      if (uart_send_active && !uart_tx_busy && !idx_mode) begin
-        if (uart_msg_idx == 6'd33) begin
+      if (uart_send_active && !uart_tx_busy && !dump_active) begin
+        if (uart_msg_idx == 6'd18) begin
           uart_send_active <= 1'b0;
         end else begin
           uart_msg_idx <= uart_msg_idx + 6'd1;

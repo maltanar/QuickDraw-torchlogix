@@ -51,6 +51,7 @@ wire [3:0] label_idx;
 wire nn_start;
 wire nn_done;
 wire [59:0] nn_scores;
+wire [783:0] nn_input_dbg;
 wire nn_best_valid;
 wire [3:0] nn_best_idx;
 
@@ -72,6 +73,7 @@ wire roi_dump;
     .label_idx(label_idx),
     .nn_start(nn_start),
     .nn_done(nn_done),
+    .nn_input_bits(nn_input_dbg),
     .nn_best_valid(nn_best_valid),
     .nn_best_idx(nn_best_idx),
     .roi_dump(roi_dump),
@@ -146,7 +148,9 @@ threshold_stream threshold_stream_i (
   wire [783:0] roi_bits;
   wire roi_dump_o_ready;
 
-  roi_capture roi_capture_i (
+  roi_capture #(
+    .VFLIP(0)
+  ) roi_capture_i (
     .data_clk(cam_PCLK),
     .data_rst_n(resetn),
     .s_valid(mono_axis_valid),
@@ -177,6 +181,7 @@ threshold_stream threshold_stream_i (
     .rst_n(resetn),
     .start(nn_start),
     .roi_bits(roi_bits),
+    .nn_input_dbg(nn_input_dbg),
     .done(nn_done),
     .scores(nn_scores)
   );
