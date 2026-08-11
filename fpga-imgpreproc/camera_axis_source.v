@@ -33,8 +33,8 @@ module camera_axis_source (
   assign tdata_rgb444 = pixel_data[11:0];
   assign tlast = frame_done;
 
-  // Full-resolution 640x480 mapping in camera_read native orientation.
-  assign pix_x = row;
-  assign pix_y = col[8:0];
+  
+  assign pix_y = row[8:0];
+  assign pix_x = 640 - col; // mirror the x axis for camera view of sketches to look the same way during demo
 
 endmodule
