@@ -342,6 +342,23 @@ class MainWindow(QMainWindow):
         self.chk_softmax.setChecked(True)
         self.chk_softmax.stateChanged.connect(self.on_softmax_toggled)
         left_layout.addWidget(self.chk_softmax)
+
+        ascii_group = QGroupBox("ASCII Bitmap Input (28x28)")
+        ascii_layout = QVBoxLayout()
+        ascii_group.setLayout(ascii_layout)
+
+        self.ascii_bitmap_input = QPlainTextEdit()
+        self.ascii_bitmap_input.setPlaceholderText(
+            "Paste 28 lines of 28 chars each, using only 0 and 1"
+        )
+        self.ascii_bitmap_input.setFixedHeight(180)
+        ascii_layout.addWidget(self.ascii_bitmap_input)
+
+        self.btn_run_ascii_bitmap = QPushButton("Run ASCII Bitmap")
+        self.btn_run_ascii_bitmap.clicked.connect(self.on_run_ascii_bitmap)
+        ascii_layout.addWidget(self.btn_run_ascii_bitmap)
+
+        left_layout.addWidget(ascii_group)
         left_layout.addStretch()
         
         layout.addLayout(left_layout)
@@ -642,6 +659,35 @@ class MainWindow(QMainWindow):
 
     def on_softmax_toggled(self):
         self.on_draw_update(self.drawing_widget.get_image_array())
+
+    def parse_ascii_bitmap(self, text: str) -> np.ndarray:
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+        if len(lines) != 28:
+            raise ValueError(f"Expected 28 non-empty rows, got {len(lines)}")
+
+        bitmap = np.zeros((28, 28), dtype=np.float32)
+        for row_idx, line in enumerate(lines):
+            if len(line) != 28:
+                raise ValueError(
+                    f"Row {row_idx + 1} must contain exactly 28 characters, got {len(line)}"
+                )
+            for col_idx, ch in enumerate(line):
+                if ch not in ("0", "1"):
+                    raise ValueError(
+                        f"Invalid character '{ch}' at row {row_idx + 1}, col {col_idx + 1}; only 0/1 are allowed"
+                    )
+                bitmap[row_idx, col_idx] = 1.0 if ch == "1" else 0.0
+
+        return np.expand_dims(bitmap, axis=(0, 1))
+
+    def on_run_ascii_bitmap(self):
+        try:
+            img_array = self.parse_ascii_bitmap(self.ascii_bitmap_input.toPlainText())
+        except ValueError as e:
+            QMessageBox.warning(self, "Invalid ASCII Bitmap", str(e))
+            return
+
+        self.on_draw_update(img_array)
 
     def init_plot(self):
         self.ax.clear()
