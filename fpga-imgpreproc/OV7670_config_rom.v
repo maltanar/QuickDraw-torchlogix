@@ -66,8 +66,8 @@ module OV7670_config_rom(
     //begin mystery scaling numbers
     35: dout <= 16'h70_3a;  // SCALING_XSC          *Leave as default. No test pattern output. 
     36: dout <= 16'h71_35;  // SCALING_YSC          *Leave as default. No test pattern output.
-    37: dout <= 16'h72_11;  // SCALING DCWCTR       *Leave as default. Vertical down sample by 2. Horizontal down sample by 2.
-    38: dout <= 16'h73_f0;  // SCALING PCLK_DIV 
+    37: dout <= 16'h72_00;  // SCALING DCWCTR       Disable downsampling for full VGA output.
+    38: dout <= 16'h73_00;  // SCALING PCLK_DIV     Disable scaled pixel clock divide.
     39: dout <= 16'ha2_02;  // SCALING PCLK DELAY   *Leave as deafult. 
     //gamma curve values
     40: dout <= 16'h7a_20;  // SLOP

@@ -3,7 +3,7 @@ module vga_scanout (
   input  wire [11:0] pix_in,
   output wire [18:0] pix_addr,
   output wire [9:0] pix_x,
-  output wire [8:0] pix_y,
+  output wire [9:0] pix_y,
   output wire       pix_req_valid,
 
   output wire       vga_hsync,
@@ -27,8 +27,8 @@ module vga_scanout (
   reg in_display_d1;
   reg [9:0] pix_x_d0;
   reg [9:0] pix_x_d1;
-  reg [8:0] pix_y_d0;
-  reg [8:0] pix_y_d1;
+  reg [9:0] pix_y_d0;
+  reg [9:0] pix_y_d1;
 
   hvsync_generator hsync_i (
     .clk(clk_25mhz),
@@ -41,7 +41,7 @@ module vga_scanout (
 
   assign pix_req_valid = in_display_area;
   assign pix_x = counter_x;
-  assign pix_y = counter_y;
+  assign pix_y = {1'b0, counter_y};
   assign pix_addr = ({10'd0, counter_y} << 9) + ({10'd0, counter_y} << 7) + counter_x;
 
   always @(posedge clk_25mhz) begin

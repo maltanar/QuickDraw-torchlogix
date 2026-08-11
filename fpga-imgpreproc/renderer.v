@@ -6,7 +6,7 @@ module renderer (
   input  wire       s_mono,
   input  wire       s_tlast,
   input  wire [9:0] s_x,
-  input  wire [8:0] s_y,
+  input  wire [9:0] s_y,
 
   input  wire [9:0] roi_cx,
   input  wire [8:0] roi_cy,
@@ -379,13 +379,13 @@ module renderer (
   wire [8:0] rect_bottom = rect_bottom_r;
 
   wire [9:0] vga_x = s_x;
-  wire [8:0] vga_y = s_y;
+  wire [9:0] vga_y = s_y;
 
   // 1:1 pixel mapping between captured mono stream and VGA space.
   wire [9:0] cell_x0 = vga_x;
   wire [9:0] cell_x1 = vga_x;
-  wire [8:0] cell_y0 = vga_y;
-  wire [8:0] cell_y1 = vga_y;
+  wire [9:0] cell_y0 = vga_y;
+  wire [9:0] cell_y1 = vga_y;
 
   wire [9:0] rect_left_edge_hi = rect_left + BORDER_THICK - 10'd1;
   wire [9:0] rect_right_edge_lo = rect_right - BORDER_THICK + 10'd1;
@@ -393,16 +393,16 @@ module renderer (
   wire [8:0] rect_bottom_edge_lo = rect_bottom - BORDER_THICK[8:0] + 9'd1;
 
   wire ov_x_rect = (cell_x1 >= rect_left) && (cell_x0 <= rect_right);
-  wire ov_y_rect = (cell_y1 >= rect_top) && (cell_y0 <= rect_bottom);
+  wire ov_y_rect = (cell_y1 >= {1'b0, rect_top}) && (cell_y0 <= {1'b0, rect_bottom});
 
   wire on_left_edge =
     (cell_x1 >= rect_left) && (cell_x0 <= rect_left_edge_hi) && ov_y_rect;
   wire on_right_edge =
     (cell_x1 >= rect_right_edge_lo) && (cell_x0 <= rect_right) && ov_y_rect;
   wire on_top_edge =
-    (cell_y1 >= rect_top) && (cell_y0 <= rect_top_edge_hi) && ov_x_rect;
+    (cell_y1 >= {1'b0, rect_top}) && (cell_y0 <= {1'b0, rect_top_edge_hi}) && ov_x_rect;
   wire on_bottom_edge =
-    (cell_y1 >= rect_bottom_edge_lo) && (cell_y0 <= rect_bottom) && ov_x_rect;
+    (cell_y1 >= {1'b0, rect_bottom_edge_lo}) && (cell_y0 <= {1'b0, rect_bottom}) && ov_x_rect;
 
   wire draw_border = on_left_edge || on_right_edge || on_top_edge || on_bottom_edge;
 
@@ -411,13 +411,13 @@ module renderer (
   wire [8:0] text_y0 = text_y0_r;
   wire [7:0] text_w_cells = ({4'd0, MAX_NAME_LEN} * {5'd0, GLYPH_ADV});
   wire [9:0] text_rel_x_cells_full = (vga_x - text_x0);
-  wire [8:0] text_rel_y_cells_full = (vga_y - text_y0);
+  wire [9:0] text_rel_y_cells_full = (vga_y - {1'b0, text_y0});
   wire [7:0] text_rel_x_cells = text_rel_x_cells_full[7:0];
   wire text_in_bounds =
     (vga_x >= text_x0) &&
     (vga_y >= text_y0) &&
     (text_rel_x_cells_full < {2'd0, text_w_cells}) &&
-    (text_rel_y_cells_full < {6'd0, GLYPH_H});
+    (text_rel_y_cells_full < {7'd0, GLYPH_H});
 
   // Exact for 0..54 (the valid text cell range): floor(x/5) = (x*13)>>6.
   // Gate with text_in_bounds so out-of-range values do not matter.
@@ -437,7 +437,7 @@ module renderer (
   // Pipeline stage to break the long path through ROI math -> text decode -> color mux.
   reg        p_valid;
   reg  [9:0] p_x;
-  reg  [8:0] p_y;
+  reg  [9:0] p_y;
   reg        p_mono;
   reg        p_draw_border;
   reg        p_text_in_bounds;
@@ -467,7 +467,7 @@ module renderer (
 
       p_valid <= 1'b0;
       p_x <= 10'd0;
-      p_y <= 9'd0;
+      p_y <= 10'd0;
       p_mono <= 1'b0;
       p_draw_border <= 1'b0;
       p_text_in_bounds <= 1'b0;

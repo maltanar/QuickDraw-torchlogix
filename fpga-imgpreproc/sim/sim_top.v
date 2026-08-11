@@ -76,7 +76,7 @@ module sim_top (
   wire [11:0] cam_axis_rgb444;
   wire cam_axis_tlast;
   wire [9:0] cam_axis_x;
-  wire [8:0] cam_axis_y;
+  wire [9:0] cam_axis_y;
 
   sim_camera_source camera_axis_source_i (
     .cam_pclk(sim_cam_pclk),
@@ -99,7 +99,7 @@ module sim_top (
   wire mono_axis_pixel;
   wire mono_axis_tlast;
   wire [9:0] mono_axis_x;
-  wire [8:0] mono_axis_y;
+  wire [9:0] mono_axis_y;
 
   threshold_stream threshold_stream_i (
     .cfg_clk(clk_25MHz),
@@ -129,7 +129,7 @@ module sim_top (
   wire mono_axis_pixel_out;
   wire mono_axis_tlast_out;
   wire [9:0] mono_axis_x_out;
-  wire [8:0] mono_axis_y_out;
+  wire [9:0] mono_axis_y_out;
   wire [783:0] roi_bits;
   wire roi_dump_o_ready;
 
@@ -183,13 +183,17 @@ module sim_top (
   wire cap_rmono;
   wire [18:0] vga_rd_addr;
   wire [9:0] vga_scan_x;
-  wire [8:0] vga_scan_y;
+  wire [9:0] vga_scan_y;
   wire scan_pix_valid;
+  wire cap_in_range = (mono_axis_x_out < 10'd640) && (mono_axis_y_out < 10'd480);
+  wire cap_we = mono_axis_valid_out && cap_in_range;
+  wire [18:0] cap_waddr =
+    (({10'd0, mono_axis_y_out} << 9) + ({10'd0, mono_axis_y_out} << 7) + mono_axis_x_out);
 
   capture_buffer capture_buffer_i (
     .wclk(sim_cam_pclk),
-    .we(mono_axis_valid_out),
-    .waddr((({10'd0, mono_axis_y_out} << 9) + ({10'd0, mono_axis_y_out} << 7) + mono_axis_x_out)),
+    .we(cap_we),
+    .waddr(cap_waddr),
     .wmono(mono_axis_pixel_out),
     .rclk(clk_25MHz),
     .re(1'b1),
@@ -199,13 +203,13 @@ module sim_top (
 
   reg scan_pix_valid_d;
   reg [9:0] scan_x_d;
-  reg [8:0] scan_y_d;
+  reg [9:0] scan_y_d;
 
   always @(posedge clk_25MHz or negedge rst_n) begin
     if (!rst_n) begin
       scan_pix_valid_d <= 1'b0;
       scan_x_d <= 10'd0;
-      scan_y_d <= 9'd0;
+      scan_y_d <= 10'd0;
     end else begin
       scan_pix_valid_d <= scan_pix_valid;
       scan_x_d <= vga_scan_x;

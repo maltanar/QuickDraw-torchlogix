@@ -50,7 +50,7 @@ module control_uart (
   wire uart_tx_wr;
 
   reg uart_send_active;
-  reg [4:0] uart_msg_idx;
+  reg [5:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
   reg       nn_started;
   reg       nn_wait_mode;
@@ -58,7 +58,7 @@ module control_uart (
   reg [1:0] idx_tx_phase;
   reg [3:0] idx_tx_value;
 
-  // Format: "T:X X:XXX Y:XXX S:X\n" (hex values, 20 bytes)
+  // Format: "T:X X:XXX Y:XXX S:X\n" (19 bytes)
   function [7:0] hex_char;
     input [3:0] nibble;
     begin
@@ -96,8 +96,8 @@ module control_uart (
     (uart_msg_idx == 5'd15) ? 8'h20 :                          // ' '
     (uart_msg_idx == 5'd16) ? 8'h53 :                          // 'S'
     (uart_msg_idx == 5'd17) ? 8'h3A :                          // ':'
-    (uart_msg_idx == 5'd18) ? tx_size_char :                   // size char
-                              8'h0A;                           // '\n'
+    (uart_msg_idx == 6'd18) ? tx_size_char :                   // size char
+            8'h0A;                           // '\n'
 
   // raw ROI dump is disabled; c now triggers neural inference output
   assign roi_dump_o_ready = 1'b0;
@@ -130,7 +130,7 @@ module control_uart (
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
       uart_send_active <= 1'b0;
-      uart_msg_idx <= 5'd0;
+      uart_msg_idx <= 6'd0;
       threshold_wr <= 1'b0;
       threshold_wdata <= 4'd7;
       uart_esc_state <= 2'd0;
@@ -187,7 +187,7 @@ module control_uart (
               threshold_wr <= 1'b1;
               if (!uart_send_active) begin
                 uart_send_active <= 1'b1;
-                uart_msg_idx <= 5'd0;
+                uart_msg_idx <= 6'd0;
               end
             end
           end else if (uart_rx_data == 8'h2D) begin
@@ -196,26 +196,26 @@ module control_uart (
               threshold_wr <= 1'b1;
               if (!uart_send_active) begin
                 uart_send_active <= 1'b1;
-                uart_msg_idx <= 5'd0;
+                uart_msg_idx <= 6'd0;
               end
             end
           end else if ((uart_rx_data == 8'h53) || (uart_rx_data == 8'h73)) begin
             roi_size_sel <= 2'd0;
             if (!uart_send_active) begin
               uart_send_active <= 1'b1;
-              uart_msg_idx <= 5'd0;
+              uart_msg_idx <= 6'd0;
             end
           end else if ((uart_rx_data == 8'h4D) || (uart_rx_data == 8'h6D)) begin
             roi_size_sel <= 2'd1;
             if (!uart_send_active) begin
               uart_send_active <= 1'b1;
-              uart_msg_idx <= 5'd0;
+              uart_msg_idx <= 6'd0;
             end
           end else if ((uart_rx_data == 8'h4C) || (uart_rx_data == 8'h6C)) begin
             roi_size_sel <= 2'd2;
             if (!uart_send_active) begin
               uart_send_active <= 1'b1;
-              uart_msg_idx <= 5'd0;
+              uart_msg_idx <= 6'd0;
             end
           end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
             // 'C' or 'c': print argmax class index on next valid inference result.
@@ -230,7 +230,7 @@ module control_uart (
             label_idx <= uart_rx_data - 8'h57;
           end else if ((uart_rx_data == 8'h3F) && !uart_send_active) begin
             uart_send_active <= 1'b1;
-            uart_msg_idx <= 5'd0;
+            uart_msg_idx <= 6'd0;
           end
         end else if (uart_esc_state == 2'd1) begin
           if (uart_rx_data == 8'h5B) begin
@@ -267,7 +267,7 @@ module control_uart (
           end
           if (!uart_send_active) begin
             uart_send_active <= 1'b1;
-            uart_msg_idx <= 5'd0;
+            uart_msg_idx <= 6'd0;
           end
         end
       end
@@ -285,10 +285,10 @@ module control_uart (
       end
 
       if (uart_send_active && !uart_tx_busy && !idx_mode) begin
-        if (uart_msg_idx == 5'd19) begin
+        if (uart_msg_idx == 6'd33) begin
           uart_send_active <= 1'b0;
         end else begin
-          uart_msg_idx <= uart_msg_idx + 5'd1;
+          uart_msg_idx <= uart_msg_idx + 6'd1;
         end
       end
     end

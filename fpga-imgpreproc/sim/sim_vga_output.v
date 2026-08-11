@@ -3,7 +3,7 @@ module sim_vga_output (
   input  wire [11:0] pix_in,
   output wire [18:0] pix_addr,
   output wire [9:0] pix_x,
-  output wire [8:0] pix_y,
+  output wire [9:0] pix_y,
   output wire        pix_req_valid,
   output wire        in_display,
 
@@ -38,7 +38,7 @@ module sim_vga_output (
 
   assign pix_req_valid = in_display_area;
   assign pix_x = counter_x;
-  assign pix_y = counter_y;
+  assign pix_y = {1'b0, counter_y};
   assign pix_addr = ({10'd0, counter_y} << 9) + ({10'd0, counter_y} << 7) + counter_x;
   assign in_display = in_display_d1;
 

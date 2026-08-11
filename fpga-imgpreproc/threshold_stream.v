@@ -10,14 +10,14 @@ module threshold_stream (
   input  wire [11:0] s_rgb444,
   input  wire       s_tlast,
   input  wire [9:0] s_x,
-  input  wire [8:0] s_y,
+  input  wire [9:0] s_y,
 
   output wire [3:0] threshold_level,
   output wire       m_valid,
   output wire       m_mono,
   output wire       m_tlast,
   output wire [9:0] m_x,
-  output wire [8:0] m_y
+  output wire [9:0] m_y
 );
 
   reg [3:0] cfg_shadow;

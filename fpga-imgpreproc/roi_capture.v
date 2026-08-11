@@ -38,14 +38,14 @@ module roi_capture #(
   input  wire       s_pixel,
   input  wire       s_tlast,
   input  wire [9:0] s_x,
-  input  wire [8:0] s_y,
+  input  wire [9:0] s_y,
 
   // Pass-through stream output (data_clk domain, wired straight through)
   output wire       m_valid,
   output wire       m_pixel,
   output wire       m_tlast,
   output wire [9:0] m_x,
-  output wire [8:0] m_y,
+  output wire [9:0] m_y,
 
   // -------------------------------------------------------------------
   // ROI configuration (quasi-static, from ctrl_clk domain)
@@ -88,22 +88,23 @@ module roi_capture #(
     (roi_size_sel == 2'd1) ? 7'd28 : 7'd56;
 
   wire [9:0] cam_cx = roi_cx;
-  wire [8:0] cam_cy = roi_cy;
+  wire [9:0] cam_cy = {1'b0, roi_cy};
 
   wire [9:0] roi_cam_x_min = cam_cx - {3'b000, cam_half};
   wire [9:0] roi_cam_x_max = cam_cx + {3'b000, cam_half} - 10'd1;
-  wire [8:0] roi_cam_y_min = cam_cy - {2'b00, cam_half};
-  wire [8:0] roi_cam_y_max = cam_cy + {2'b00, cam_half} - 9'd1;
+  wire [9:0] roi_cam_y_min = cam_cy - {3'b000, cam_half};
+  wire [9:0] roi_cam_y_max = cam_cy + {3'b000, cam_half} - 10'd1;
 
   // =========================================================================
   // Nearest-neighbour capture – data_clk domain
   // =========================================================================
   wire pix_in_roi = s_valid
                   && (s_x >= roi_cam_x_min) && (s_x <= roi_cam_x_max)
-                  && (s_y >= roi_cam_y_min) && (s_y <= roi_cam_y_max);
+                  && (s_y >= roi_cam_y_min) && (s_y <= roi_cam_y_max)
+                  && (s_y < 10'd480);
 
   wire [9:0] rel_x = s_x - roi_cam_x_min;
-  wire [8:0] rel_y = s_y - roi_cam_y_min;
+  wire [9:0] rel_y = s_y - roi_cam_y_min;
 
   // Only sample at the top-left corner of each output cell.
   // S: every pixel (step=1), M: every 2nd (step=2), L: every 4th (step=4)

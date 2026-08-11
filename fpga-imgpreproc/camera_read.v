@@ -8,17 +8,17 @@ module camera_read(
 	output reg [15:0] pixel_data = 0,
 	output reg pixel_valid = 0,
 	output reg frame_done = 0,
-	output [9:0] row,
-	output [9:0] col
+	output [9:0] pix_x,
+	output [9:0] pix_y
     );
 
 	reg [7:0] first_byte, second_byte;
-	reg [9:0] row_count = 0 , col_count = 0;
+	reg [9:0] x_count = 0 , y_count = 0;
 	reg start_of_frame = 0;
 	reg [7:0] data;
 
-	assign row = row_count;
-	assign col = col_count;
+	assign pix_x = x_count;
+	assign pix_y = y_count;
 
 	assign x_clock = clk;
 
@@ -38,8 +38,8 @@ module camera_read(
 	     frame_done <= 0;
 	     pixel_half <= 0;
              start_of_frame <= 1;
-             row_count <= 0;
-             col_count <= 0;
+             x_count <= 0;
+             y_count <= 0;
 	  end
 
 	  ROW_CAPTURE: begin
@@ -59,11 +59,11 @@ module camera_read(
                  end
 	         if (pixel_half) pixel_data[7:0] <= p_data;
 	         else pixel_data[15:8] <= p_data;
-                 if (pixel_half) row_count <= row_count + 1;
+	         if (pixel_half) x_count <= x_count + 1;
 	         pixel_half <= ~ pixel_half;
 	     end else begin
-               row_count <= 0;
-               if (row_count != 0) col_count <= col_count + 1;
+	       x_count <= 0;
+	       if (x_count != 0) y_count <= y_count + 1;
              end
 	  end
 
