@@ -19,7 +19,6 @@ VERILOG_FILES := \
     OV7670_config_rom.v \
     OV7670_config.v \
     SCCB_interface.v \
-    vgabuff.v \
     gatemate_25MHz_pll.v \
 
 include makefile.inc
