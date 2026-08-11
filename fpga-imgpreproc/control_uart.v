@@ -196,38 +196,18 @@ module control_uart (
             if (threshold_wdata < 4'd15) begin
               threshold_wdata <= threshold_wdata + 4'd1;
               threshold_wr <= 1'b1;
-              if (!uart_send_active) begin
-                uart_send_active <= 1'b1;
-                uart_msg_idx <= 6'd0;
-              end
             end
           end else if (uart_rx_data == 8'h2D) begin
             if (threshold_wdata > 4'd0) begin
               threshold_wdata <= threshold_wdata - 4'd1;
               threshold_wr <= 1'b1;
-              if (!uart_send_active) begin
-                uart_send_active <= 1'b1;
-                uart_msg_idx <= 6'd0;
-              end
             end
           end else if ((uart_rx_data == 8'h53) || (uart_rx_data == 8'h73)) begin
             roi_size_sel <= 2'd0;
-            if (!uart_send_active) begin
-              uart_send_active <= 1'b1;
-              uart_msg_idx <= 6'd0;
-            end
           end else if ((uart_rx_data == 8'h4D) || (uart_rx_data == 8'h6D)) begin
             roi_size_sel <= 2'd1;
-            if (!uart_send_active) begin
-              uart_send_active <= 1'b1;
-              uart_msg_idx <= 6'd0;
-            end
           end else if ((uart_rx_data == 8'h4C) || (uart_rx_data == 8'h6C)) begin
             roi_size_sel <= 2'd2;
-            if (!uart_send_active) begin
-              uart_send_active <= 1'b1;
-              uart_msg_idx <= 6'd0;
-            end
           end else if ((uart_rx_data == 8'h43) || (uart_rx_data == 8'h63)) begin
             // 'C' or 'c': dump the latched 784-bit NN input as 28x28 ASCII.
             if (!uart_send_active && !dump_active) begin
@@ -280,10 +260,6 @@ module control_uart (
             end else begin
               roi_cx <= rect_cx_min;
             end
-          end
-          if (!uart_send_active) begin
-            uart_send_active <= 1'b1;
-            uart_msg_idx <= 6'd0;
           end
         end
       end
