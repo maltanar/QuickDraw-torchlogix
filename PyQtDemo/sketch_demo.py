@@ -68,7 +68,8 @@ def pack_binary_image_to_inp(gray_1x1x28x28, threshold=0.5):
 def unpack_scores(scores_flat):
     scores = []
     for i in range(10):
-        raw = (scores_flat >> (6 * i)) & 0x0000003f
+        #raw = (scores_flat >> (6 * i)) & 0x0000003f
+        raw = (scores_flat >> (32 * i)) & 0xffffffff
         scores.append(to_signed32(raw))
     ret = np.array(scores, dtype=np.float32)
     return ret
@@ -210,7 +211,7 @@ class MainWindow(QMainWindow):
         project_root = Path(__file__).resolve().parents[1]
         self.verilog_path = project_root / "verilog" / "mlp_quickdraw_4k_4k.v"
         self.verilated_cache_root = project_root / "verilated"
-        self.top_module_name = "neuralut"
+        self.top_module_name = "circuit"
         neuralut_root = project_root.parent / "NeuraLUT"
         self.classes = load_class_names()
         self.sim = None
@@ -690,18 +691,19 @@ class MainWindow(QMainWindow):
                 if self.sim is None:
                     logits = np.zeros(10)
                 else:
-                    self.sim.io.rst = 0
-                    self.sim.io.clk = 0
-                    self.sim.io.rst = 1
-                    for i in range(10):
-                        self.sim.io.clk = 1
-                        self.sim.io.clk = 0
-                    self.sim.io.rst = 0
-                    self.sim.io.M0 = inp_value
-                    for i in range(10):
-                        self.sim.io.clk = 1
-                        self.sim.io.clk = 0
-                    logits = unpack_scores(int(self.sim.io.M6))
+                    #self.sim.io.rst = 0
+                    #self.sim.io.clk = 0
+                    #self.sim.io.rst = 1
+                    #for i in range(10):
+                    #    self.sim.io.clk = 1
+                    #    self.sim.io.clk = 0
+                    #self.sim.io.rst = 0
+                    self.sim.io.inp = inp_value
+                    #for i in range(10):
+                    #    self.sim.io.clk = 1
+                    #    self.sim.io.clk = 0
+                    self.sim.eval()
+                    logits = unpack_scores(int(self.sim.io.scores_flat))
             else:  # fpga
                 if self.fpga_uart is None or not self.fpga_uart.is_open():
                     logits = np.zeros(10)

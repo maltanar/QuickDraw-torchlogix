@@ -1,5 +1,5 @@
 module top #(
-  parameter integer N_SCORE_BITS = 6,
+  parameter integer N_SCORE_BITS = 32,
   parameter integer N_CLASSES = 10
 )
 (

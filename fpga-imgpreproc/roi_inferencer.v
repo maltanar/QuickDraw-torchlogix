@@ -1,8 +1,10 @@
 // Define ROI_INFERENCER_USE_MLP to build against the current MLP backend.
 // Leave it undefined to use the neuralut backend.
 // Remember to update latency (1 for MLP, 4 for neuralut) and N_SCORE_BITS (32 for MLP, 6 for neuralut) in the top.v accordingly.
+`define ROI_INFERENCER_USE_MLP
+
 `ifdef ROI_INFERENCER_USE_MLP
-`include "../verilog/mlp_quickdraw_4k_4k.v"
+`include "../verilog/mlp_quickdraw_500_rank4_learnable.v"
 `else
 `include "../verilog/neuralut_lut4_79.54.v"
 `endif
