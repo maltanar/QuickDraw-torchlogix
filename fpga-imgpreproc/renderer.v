@@ -249,16 +249,16 @@ module renderer (
 
   reg [8*MAX_NAME_LEN-1:0] CLASS_NAME_TABLE [0:9];
   initial begin
-    CLASS_NAME_TABLE[0] = "bicycle    ";
-    CLASS_NAME_TABLE[1] = "eyeglasses ";
-    CLASS_NAME_TABLE[2] = "car        ";
-    CLASS_NAME_TABLE[3] = "eye        ";
-    CLASS_NAME_TABLE[4] = "tree       ";
-    CLASS_NAME_TABLE[5] = "apple      ";
-    CLASS_NAME_TABLE[6] = "smiley_face";
-    CLASS_NAME_TABLE[7] = "cell_phone ";
-    CLASS_NAME_TABLE[8] = "airplane   ";
-    CLASS_NAME_TABLE[9] = "book       ";
+    CLASS_NAME_TABLE[0] = "airplane   ";
+    CLASS_NAME_TABLE[1] = "apple      ";
+    CLASS_NAME_TABLE[2] = "bicycle    ";
+    CLASS_NAME_TABLE[3] = "book       ";
+    CLASS_NAME_TABLE[4] = "car        ";
+    CLASS_NAME_TABLE[5] = "cell_phone ";
+    CLASS_NAME_TABLE[6] = "eye        ";
+    CLASS_NAME_TABLE[7] = "eyeglasses ";
+    CLASS_NAME_TABLE[8] = "smiley_face";
+    CLASS_NAME_TABLE[9] = "tree       ";
   end
 
   function [7:0] class_char;
