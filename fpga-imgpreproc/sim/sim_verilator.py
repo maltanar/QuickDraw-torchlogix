@@ -99,6 +99,7 @@ class VerilatorSimulator:
             "-Wno-TIMESCALEMOD",
             "-Wno-PINMISSING",
             "-Wno-CASEINCOMPLETE",
+            str(self.hdl_path.parent / "uart.v"),
         ]
         
         print(f"Top file: {top_file}")
@@ -189,11 +190,10 @@ class VerilatorSimulator:
             if self._cam_frame_queue:
                 self._cam_frame = self._cam_frame_queue.popleft()
                 frame_h, frame_w = self._cam_frame.shape[:2]
-                # col_count (scanlines) maps to pix_x = canvas x-axis
-                # row_count (pixels/scanline) maps to pix_y = canvas y-axis
-                # So scanlines iterate canvas width, pixels iterate canvas height.
-                self._cam_height = frame_w   # number of href pulses = canvas width
-                self._cam_width  = frame_h   # pixels per scanline   = canvas height
+                # Stream frame in normal image order:
+                # rows (y) as scanlines and columns (x) as pixels within each row.
+                self._cam_height = frame_h   # number of href pulses = image height
+                self._cam_width  = frame_w   # pixels per scanline   = image width
                 self._cam_y = 0
                 self._cam_x = 0
                 self._cam_byte = 0
@@ -276,15 +276,14 @@ class VerilatorSimulator:
 
     def _cam_load_data(self):
         """Set sim_cam_data for the current pixel byte.
-        _cam_y = scanline index = canvas x;  _cam_x = pixel index = canvas y.
+        _cam_y = scanline index = image row (y); _cam_x = pixel index = image column (x).
         """
         if (self._cam_frame is None
-                or self._cam_x >= self._cam_frame.shape[0]  # canvas height
-                or self._cam_y >= self._cam_frame.shape[1]):  # canvas width
+                or self._cam_x >= self._cam_frame.shape[1]  # image width
+                or self._cam_y >= self._cam_frame.shape[0]):  # image height
             self.sim.io.sim_cam_data = 0
             return
-        # Transposed access: row=_cam_x (canvas y), col=_cam_y (canvas x)
-        r, g, b = self._cam_frame[self._cam_x, self._cam_y, :3]
+        r, g, b = self._cam_frame[self._cam_y, self._cam_x, :3]
         gray = (int(r) + int(g) + int(b)) // 3
         self.sim.io.sim_cam_data = gray & 0xFF
 

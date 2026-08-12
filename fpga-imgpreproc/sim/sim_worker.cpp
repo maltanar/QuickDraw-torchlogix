@@ -128,16 +128,15 @@ static inline void eval_lo(Sim* s) { s->top->clk = 0; s->top->eval(); }
 static inline void eval_hi(Sim* s) { s->top->clk = 1; s->top->eval(); }
 
 static void cam_load(Sim* s) {
-    // cam_x = pixel index within scanline = canvas y-axis (row in frame array)
-    // cam_y = scanline index              = canvas x-axis (col in frame array)
+    // cam_x = pixel index within scanline = image column (x)
+    // cam_y = scanline index              = image row (y)
     if (!s->cam_frame ||
-        s->cam_x >= s->cam_frame_h ||
-        s->cam_y >= s->cam_frame_w) {
+        s->cam_x >= s->cam_frame_w ||
+        s->cam_y >= s->cam_frame_h) {
         s->top->sim_cam_data = 0;
         return;
     }
-    // Transposed access: numpy row=cam_x (canvas y), col=cam_y (canvas x)
-    const uint8_t* p = s->cam_frame + (s->cam_x * s->cam_frame_w + s->cam_y) * 3;
+    const uint8_t* p = s->cam_frame + (s->cam_y * s->cam_frame_w + s->cam_x) * 3;
     int gray = ((int)p[0] + p[1] + p[2]) / 3;
     s->top->sim_cam_data = (uint8_t)gray;
 }
@@ -151,8 +150,8 @@ static void drive_camera(Sim* s) {
             s->cam_frame   = s->cam_pending;  s->cam_pending = nullptr;
             s->cam_frame_h = s->cam_pending_h;
             s->cam_frame_w = s->cam_pending_w;
-            s->cam_height  = s->cam_frame_w;  // scanlines = canvas width
-            s->cam_width   = s->cam_frame_h;  // pixels/scanline = canvas height
+            s->cam_height  = s->cam_frame_h;  // scanlines = image height
+            s->cam_width   = s->cam_frame_w;  // pixels/scanline = image width
             s->cam_y = 0;  s->cam_x = 0;
             s->cam_byte = 0;  s->cam_pclk = 0;
             s->top->sim_cam_vsync = 1;

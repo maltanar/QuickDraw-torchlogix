@@ -36,7 +36,7 @@ class VerilatorSimulator:
         self.vcd_file = vcd_file or "sim_trace.vcd"
 
         lib_path = self.hdl_path / "libsim_worker.so"
-        if not lib_path.exists():
+        if self._needs_rebuild(lib_path):
             self._build(lib_path)
 
         self._lib = ctypes.CDLL(str(lib_path))
@@ -56,18 +56,36 @@ class VerilatorSimulator:
 
         print("✓ C++ sim_worker backend ready")
 
+    def _needs_rebuild(self, lib_path: Path) -> bool:
+        """Return True when libsim_worker.so is missing or older than key sources."""
+        if not lib_path.exists():
+            return True
+
+        lib_mtime = lib_path.stat().st_mtime
+        watched = [
+            self.hdl_path / "sim_worker.cpp",
+            self.hdl_path / "sim_top.v",
+            self.hdl_path / "sim_vga_output.v",
+            self.hdl_path.parent / "uart.v",
+            self.hdl_path.parent / "control_uart.v",
+        ]
+        for src in watched:
+            if src.exists() and src.stat().st_mtime > lib_mtime:
+                return True
+        return False
+
     # ------------------------------------------------------------------ build
 
     def _build(self, lib_path: Path):
         """Run build_worker.sh to compile the shared library."""
-        script = self.hdl_path / "build_worker.sh"
+        script = (self.hdl_path / "build_worker.sh").resolve()
         if not script.exists():
             raise FileNotFoundError(
                 f"libsim_worker.so not found and build_worker.sh is missing.\n"
                 f"Re-run: cd {self.hdl_path} && bash build_worker.sh"
             )
         print("Building C++ simulation library (one-time compilation) …")
-        r = subprocess.run(["bash", str(script)], cwd=str(self.hdl_path))
+        r = subprocess.run(["bash", str(script)], cwd=str(self.hdl_path.resolve()))
         if r.returncode != 0 or not lib_path.exists():
             raise RuntimeError(
                 "build_worker.sh failed — check compiler/Verilator output above."

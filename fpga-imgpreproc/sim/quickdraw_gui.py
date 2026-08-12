@@ -52,13 +52,17 @@ class CameraCanvas(QFrame):
         
         self.setMinimumSize(width, height)
         self.setMaximumSize(width, height)
-        self.setStyleSheet("border: 1px solid black;")
+        self.setStyleSheet("background-color: white; border: 3px solid #1f2937;")
         self.setMouseTracking(True)
     
     def paintEvent(self, event):
         """Paint the canvas with current image"""
         painter = QPainter(self)
         painter.drawImage(0, 0, self.image)
+        # Draw border last so it remains visible over the canvas image.
+        painter.setPen(QPen(QColor(31, 41, 55), 3))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(self.rect().adjusted(1, 1, -2, -2))
     
     def mousePressEvent(self, event):
         """Start drawing"""
@@ -155,8 +159,10 @@ class VGADisplay(QFrame):
         
         # Draw all pixels in the new frame
         for addr, rgb444 in frame_data.items():
-            y = (addr >> 8) & 0xFF
-            x = addr & 0xFF
+            # sim_vga_pix_addr is linear VGA address: addr = y * 640 + x.
+            # Convert 640x480 scanout to 160x240 logical display by 4x2 decimation.
+            x = (addr % 640) // 4
+            y = (addr // 640) // 2
             
             # Convert RGB444 to RGB888
             r = ((rgb444 >> 8) & 0xF) * 17
@@ -209,7 +215,7 @@ class QuickDrawSimulator(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("QuickDraw FPGA Simulator")
-        self.setGeometry(100, 100, 770, 700)
+        self.setGeometry(100, 100, 1500, 900)
         
         # Create central widget
         central = QWidget()
@@ -219,7 +225,7 @@ class QuickDrawSimulator(QMainWindow):
         # Left side: Input canvas
         left_layout = QVBoxLayout()
         left_layout.addWidget(QLabel("Camera Input (Draw here)"))
-        self.camera = CameraCanvas(160, 240)
+        self.camera = CameraCanvas(640, 480)
         left_layout.addWidget(self.camera)
         
         # Clear button
@@ -233,7 +239,6 @@ class QuickDrawSimulator(QMainWindow):
         self.cam_flip_v_cb = QCheckBox("Flip V")
         self.cam_flip_h_cb.toggled.connect(lambda v: setattr(self.camera, 'flip_h', v))
         self.cam_flip_v_cb.toggled.connect(lambda v: setattr(self.camera, 'flip_v', v))
-        self.cam_flip_v_cb.setChecked(True)  # flip V by default
         cam_flip_row.addWidget(QLabel("Camera:"))
         cam_flip_row.addWidget(self.cam_flip_h_cb)
         cam_flip_row.addWidget(self.cam_flip_v_cb)
@@ -269,7 +274,6 @@ class QuickDrawSimulator(QMainWindow):
         self.flip_v_cb = QCheckBox("Flip V")
         self.flip_h_cb.toggled.connect(lambda v: setattr(self.vga_display, 'flip_h', v))
         self.flip_v_cb.toggled.connect(lambda v: setattr(self.vga_display, 'flip_v', v))
-        self.flip_v_cb.setChecked(True)  # VGA y-axis is inverted by default
         flip_row.addWidget(self.flip_h_cb)
         flip_row.addWidget(self.flip_v_cb)
         flip_row.addStretch()
