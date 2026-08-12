@@ -53,6 +53,7 @@ wire [8:0] roi_cy;
 wire [3:0] label_idx;
 wire nn_start;
 wire nn_done;
+wire roi_frame_done;
 localparam integer SCORE_WIDTH = N_CLASSES * N_SCORE_BITS;
 wire [SCORE_WIDTH-1:0] nn_scores;
 wire [783:0] nn_input_dbg;
@@ -77,6 +78,7 @@ wire roi_dump;
     .label_idx(label_idx),
     .nn_start(nn_start),
     .nn_done(nn_done),
+    .frame_done(roi_frame_done),
     .nn_input_bits(nn_input_dbg),
     .nn_best_valid(nn_best_valid),
     .nn_best_idx(nn_best_idx),
@@ -176,6 +178,7 @@ threshold_stream threshold_stream_i (
     .ctrl_rst_n(resetn),
     .roi_bits(roi_bits),
     .roi_is_background(roi_is_background),
+    .frame_done(roi_frame_done),
     .dump(roi_dump),
     .dump_o_valid(roi_dump_o_valid),
     .dump_o_byte(roi_dump_o_byte),

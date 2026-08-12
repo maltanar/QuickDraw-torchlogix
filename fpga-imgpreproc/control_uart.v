@@ -13,6 +13,7 @@ module control_uart (
 
   output reg        nn_start,
   input  wire       nn_done,
+  input  wire       frame_done,
   input  wire [783:0] nn_input_bits,
   input  wire       nn_best_valid,
   input  wire [3:0] nn_best_idx,
@@ -53,7 +54,6 @@ module control_uart (
   reg uart_send_active;
   reg [5:0] uart_msg_idx;
   reg [1:0] uart_esc_state;
-  reg       nn_started;
   reg       dump_active;
   reg       dump_send_cr;
   reg       dump_send_nl;
@@ -141,7 +141,6 @@ module control_uart (
       roi_cy <= 9'd240;
       label_idx <= 4'd0;
       nn_start <= 1'b0;
-      nn_started <= 1'b0;
       roi_dump <= 1'b0;
       dump_active <= 1'b0;
       dump_send_cr <= 1'b0;
@@ -154,11 +153,8 @@ module control_uart (
       nn_start <= 1'b0;
       roi_dump <= 1'b0;
 
-      // Keep neural inference running continuously.
-      if (!nn_started) begin
-        nn_start <= 1'b1;
-        nn_started <= 1'b1;
-      end else if (nn_done) begin
+      // Trigger inference once per completed frame.
+      if (frame_done) begin
         nn_start <= 1'b1;
       end
 

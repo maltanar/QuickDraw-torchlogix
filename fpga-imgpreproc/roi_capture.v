@@ -65,6 +65,7 @@ module roi_capture #(
   // ASCII dump output stream (ctrl_clk domain)
   output wire [783:0] roi_bits,
   output wire         roi_is_background,
+  output wire         frame_done,     // 1-cycle pulse in ctrl_clk when a frame has fully captured
   output reg        dump_o_valid,
   output reg  [7:0] dump_o_byte,
   output reg        dump_o_last,    // asserted with the final '\n'
@@ -146,6 +147,8 @@ module roi_capture #(
 
   // White-pixel counter for background detection (data_clk domain).
   reg [9:0] white_cnt;
+  reg       roi_bg_latched;  // captured once per frame at frame end
+  reg       frame_toggle;    // toggles once per frame for CDC
 
   always @(posedge data_clk or negedge data_rst_n) begin
     if (!data_rst_n) begin
@@ -156,6 +159,8 @@ module roi_capture #(
       wr_addr_d      <= 10'd0;
       wr_pixel_d     <= 1'b0;
       white_cnt      <= 10'd0;
+      roi_bg_latched <= 1'b1;
+      frame_toggle   <= 1'b0;
     end else if (clearing) begin
       roi_buf[clear_cnt] <= 8'd0;
       wr_en_d <= 1'b0;
@@ -178,6 +183,8 @@ module roi_capture #(
 
       if (clear_pending) begin
         // Start clearing one cycle later so a final queued write can commit.
+        roi_bg_latched <= (white_cnt < WHITE_THRESH);  // latch decision for full frame
+        frame_toggle   <= ~frame_toggle;
         clearing       <= 1'b1;
         clear_cnt      <= 7'd0;
         clear_pending  <= 1'b0;
@@ -231,7 +238,7 @@ module roi_capture #(
   endgenerate
 
   // 2-FF CDC: background flag from data_clk to ctrl_clk.
-  wire roi_bg_raw = (white_cnt < WHITE_THRESH);
+  wire roi_bg_raw = roi_bg_latched;
   reg  roi_bg_s0, roi_bg_s1;
   always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
     if (!ctrl_rst_n) begin
@@ -243,6 +250,21 @@ module roi_capture #(
     end
   end
   assign roi_is_background = roi_bg_s1;
+
+  // Toggle CDC for frame_done pulse: 3 FFs (2 sync + 1 edge detect).
+  reg frame_tog_s0, frame_tog_s1, frame_tog_s2;
+  always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
+    if (!ctrl_rst_n) begin
+      frame_tog_s0 <= 1'b0;
+      frame_tog_s1 <= 1'b0;
+      frame_tog_s2 <= 1'b0;
+    end else begin
+      frame_tog_s0 <= frame_toggle;
+      frame_tog_s1 <= frame_tog_s0;
+      frame_tog_s2 <= frame_tog_s1;
+    end
+  end
+  assign frame_done = frame_tog_s1 ^ frame_tog_s2;
 
   always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
     if (!ctrl_rst_n) begin
