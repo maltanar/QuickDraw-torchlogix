@@ -25,7 +25,8 @@
 // Buffer layout: address = cell_y * 28 + cell_x  (784 bits = 98 bytes)
 
 module roi_capture #(
-  parameter VFLIP = 1   // 1 = vertically flip rows when writing to buffer
+  parameter VFLIP = 1,             // 1 = vertically flip rows when writing to buffer
+  parameter integer WHITE_THRESH = 30  // if fewer than this many white pixels, consider the ROI background
 ) (
   // -------------------------------------------------------------------
   // Write side – camera pixel clock domain
@@ -63,6 +64,7 @@ module roi_capture #(
 
   // ASCII dump output stream (ctrl_clk domain)
   output wire [783:0] roi_bits,
+  output wire         roi_is_background,
   output reg        dump_o_valid,
   output reg  [7:0] dump_o_byte,
   output reg        dump_o_last,    // asserted with the final '\n'
@@ -142,6 +144,9 @@ module roi_capture #(
   reg [9:0] wr_addr_d;
   reg       wr_pixel_d;
 
+  // White-pixel counter for background detection (data_clk domain).
+  reg [9:0] white_cnt;
+
   always @(posedge data_clk or negedge data_rst_n) begin
     if (!data_rst_n) begin
       clearing       <= 1'b1;
@@ -150,6 +155,7 @@ module roi_capture #(
       wr_en_d        <= 1'b0;
       wr_addr_d      <= 10'd0;
       wr_pixel_d     <= 1'b0;
+      white_cnt      <= 10'd0;
     end else if (clearing) begin
       roi_buf[clear_cnt] <= 8'd0;
       wr_en_d <= 1'b0;
@@ -161,10 +167,12 @@ module roi_capture #(
       end
     end else begin
       // Commit delayed write from the prior cycle.
-      if (wr_en_d)
+      if (wr_en_d) begin
         roi_buf[wr_addr_d >> 3][wr_addr_d & 7] <= wr_pixel_d;
+        white_cnt <= white_cnt + wr_pixel_d;  // count white pixels for background detection
+      end
 
-      if (s_valid && s_tlast) begin
+      if (s_tlast) begin
         clear_pending <= 1'b1;
       end
 
@@ -174,6 +182,7 @@ module roi_capture #(
         clear_cnt      <= 7'd0;
         clear_pending  <= 1'b0;
         wr_en_d        <= 1'b0;
+        white_cnt      <= 10'd0;
       end else begin
         // Queue current-cycle write for next cycle commit.
         wr_en_d    <= pix_in_roi && pix_is_sample;
@@ -220,6 +229,20 @@ module roi_capture #(
       assign roi_bits[g_roi_bit] = roi_buf[g_roi_bit >> 3][g_roi_bit[2:0]];
     end
   endgenerate
+
+  // 2-FF CDC: background flag from data_clk to ctrl_clk.
+  wire roi_bg_raw = (white_cnt < WHITE_THRESH);
+  reg  roi_bg_s0, roi_bg_s1;
+  always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
+    if (!ctrl_rst_n) begin
+      roi_bg_s0 <= 1'b1;
+      roi_bg_s1 <= 1'b1;
+    end else begin
+      roi_bg_s0 <= roi_bg_raw;
+      roi_bg_s1 <= roi_bg_s0;
+    end
+  end
+  assign roi_is_background = roi_bg_s1;
 
   always @(posedge ctrl_clk or negedge ctrl_rst_n) begin
     if (!ctrl_rst_n) begin

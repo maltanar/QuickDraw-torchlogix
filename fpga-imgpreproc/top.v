@@ -150,10 +150,12 @@ threshold_stream threshold_stream_i (
   wire [9:0] mono_axis_x_out;
   wire [9:0] mono_axis_y_out;
   wire [783:0] roi_bits;
+  wire         roi_is_background;
   wire roi_dump_o_ready;
 
   roi_capture #(
-    .VFLIP(0)
+    .VFLIP(0),
+    .WHITE_THRESH(50)
   ) roi_capture_i (
     .data_clk(cam_PCLK),
     .data_rst_n(resetn),
@@ -173,6 +175,7 @@ threshold_stream threshold_stream_i (
     .ctrl_clk(clk_25MHz),
     .ctrl_rst_n(resetn),
     .roi_bits(roi_bits),
+    .roi_is_background(roi_is_background),
     .dump(roi_dump),
     .dump_o_valid(roi_dump_o_valid),
     .dump_o_byte(roi_dump_o_byte),
@@ -261,7 +264,7 @@ renderer renderer_i (
   .roi_cx(roi_cx),
   .roi_cy(roi_cy),
   .roi_size_sel(roi_size_sel),
-  .label_idx(label_idx),
+  .label_idx(roi_is_background ? 4'd15 : label_idx),
   .m_we(),
   .m_waddr(),
   .m_rgb444(vga_pix_rgb)

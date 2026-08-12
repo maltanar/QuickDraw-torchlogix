@@ -137,10 +137,12 @@ module sim_top (
   wire [9:0] mono_axis_x_out;
   wire [9:0] mono_axis_y_out;
   wire [783:0] roi_bits;
+  wire         roi_is_background;
   wire roi_dump_o_ready;
 
   roi_capture #(
-    .VFLIP(0)
+    .VFLIP(0),
+    .WHITE_THRESH(50)
   ) roi_capture_i (
     .data_clk(sim_cam_pclk),
     .data_rst_n(rst_n),
@@ -160,6 +162,7 @@ module sim_top (
     .ctrl_clk(clk_25MHz),
     .ctrl_rst_n(rst_n),
     .roi_bits(roi_bits),
+    .roi_is_background(roi_is_background),
     .dump(roi_dump),
     .dump_o_valid(roi_dump_o_valid),
     .dump_o_byte(roi_dump_o_byte),
@@ -248,7 +251,7 @@ module sim_top (
     .roi_cx(roi_cx),
     .roi_cy(roi_cy),
     .roi_size_sel(roi_size_sel),
-    .label_idx(label_idx),
+    .label_idx(roi_is_background ? 4'd15 : label_idx),
     .m_we(),
     .m_waddr(),
     .m_rgb444(vga_pix_rgb)
