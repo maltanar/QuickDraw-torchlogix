@@ -28,7 +28,7 @@ def generate_dataset(rawdata_root="Data", target_root="Dataset", vfold_ratio=0.2
     print("*"*50)
     print("Generate dataset from npy data")
     print("*"*50)
-    all_files = glob.glob(os.path.join(rawdata_root, '*.npy'))
+    all_files = sorted(glob.glob(os.path.join(rawdata_root, '*.npy')))
     print("Classes number: "+str(len(all_files)))
     print("*"*50)
 
