@@ -26425,12 +26425,6 @@ wire [15:0] layer6_N0_lut_2 = 16'h7E97;
 wire [15:0] layer6_N0_lut_3 = 16'h1781;
 wire [15:0] layer6_N0_lut_4 = 16'h0100;
 wire [15:0] layer6_N0_lut_5 = 16'hFF7F;
-assign M1[0] = layer6_N0_lut_0[layer6_N0_wire];
-assign M1[1] = layer6_N0_lut_1[layer6_N0_wire];
-assign M1[2] = layer6_N0_lut_2[layer6_N0_wire];
-assign M1[3] = layer6_N0_lut_3[layer6_N0_wire];
-assign M1[4] = layer6_N0_lut_4[layer6_N0_wire];
-assign M1[5] = layer6_N0_lut_5[layer6_N0_wire];
 
 wire [3:0] layer6_N1_wire = {M0[4], M0[5], M0[6], M0[7]};
 wire [15:0] layer6_N1_lut_0 = 16'hDC3F;
@@ -26439,12 +26433,6 @@ wire [15:0] layer6_N1_lut_2 = 16'hBF2B;
 wire [15:0] layer6_N1_lut_3 = 16'h2942;
 wire [15:0] layer6_N1_lut_4 = 16'h0240;
 wire [15:0] layer6_N1_lut_5 = 16'hFFBF;
-assign M1[6] = layer6_N1_lut_0[layer6_N1_wire];
-assign M1[7] = layer6_N1_lut_1[layer6_N1_wire];
-assign M1[8] = layer6_N1_lut_2[layer6_N1_wire];
-assign M1[9] = layer6_N1_lut_3[layer6_N1_wire];
-assign M1[10] = layer6_N1_lut_4[layer6_N1_wire];
-assign M1[11] = layer6_N1_lut_5[layer6_N1_wire];
 
 wire [3:0] layer6_N2_wire = {M0[8], M0[9], M0[10], M0[11]};
 wire [15:0] layer6_N2_lut_0 = 16'hDF58;
@@ -26453,12 +26441,6 @@ wire [15:0] layer6_N2_lut_2 = 16'hB6FA;
 wire [15:0] layer6_N2_lut_3 = 16'h2093;
 wire [15:0] layer6_N2_lut_4 = 16'h0420;
 wire [15:0] layer6_N2_lut_5 = 16'hFBFF;
-assign M1[12] = layer6_N2_lut_0[layer6_N2_wire];
-assign M1[13] = layer6_N2_lut_1[layer6_N2_wire];
-assign M1[14] = layer6_N2_lut_2[layer6_N2_wire];
-assign M1[15] = layer6_N2_lut_3[layer6_N2_wire];
-assign M1[16] = layer6_N2_lut_4[layer6_N2_wire];
-assign M1[17] = layer6_N2_lut_5[layer6_N2_wire];
 
 wire [3:0] layer6_N3_wire = {M0[12], M0[13], M0[14], M0[15]};
 wire [15:0] layer6_N3_lut_0 = 16'hDAC1;
@@ -26467,12 +26449,6 @@ wire [15:0] layer6_N3_lut_2 = 16'hDB65;
 wire [15:0] layer6_N3_lut_3 = 16'h4D0C;
 wire [15:0] layer6_N3_lut_4 = 16'h0420;
 wire [15:0] layer6_N3_lut_5 = 16'hFFDF;
-assign M1[18] = layer6_N3_lut_0[layer6_N3_wire];
-assign M1[19] = layer6_N3_lut_1[layer6_N3_wire];
-assign M1[20] = layer6_N3_lut_2[layer6_N3_wire];
-assign M1[21] = layer6_N3_lut_3[layer6_N3_wire];
-assign M1[22] = layer6_N3_lut_4[layer6_N3_wire];
-assign M1[23] = layer6_N3_lut_5[layer6_N3_wire];
 
 wire [3:0] layer6_N4_wire = {M0[16], M0[17], M0[18], M0[19]};
 wire [15:0] layer6_N4_lut_0 = 16'hFA53;
@@ -26481,12 +26457,6 @@ wire [15:0] layer6_N4_lut_2 = 16'h6A01;
 wire [15:0] layer6_N4_lut_3 = 16'h21B3;
 wire [15:0] layer6_N4_lut_4 = 16'hB225;
 wire [15:0] layer6_N4_lut_5 = 16'hFFFA;
-assign M1[24] = layer6_N4_lut_0[layer6_N4_wire];
-assign M1[25] = layer6_N4_lut_1[layer6_N4_wire];
-assign M1[26] = layer6_N4_lut_2[layer6_N4_wire];
-assign M1[27] = layer6_N4_lut_3[layer6_N4_wire];
-assign M1[28] = layer6_N4_lut_4[layer6_N4_wire];
-assign M1[29] = layer6_N4_lut_5[layer6_N4_wire];
 
 wire [3:0] layer6_N5_wire = {M0[20], M0[21], M0[22], M0[23]};
 wire [15:0] layer6_N5_lut_0 = 16'h78D9;
@@ -26495,12 +26465,6 @@ wire [15:0] layer6_N5_lut_2 = 16'h7993;
 wire [15:0] layer6_N5_lut_3 = 16'hD0C5;
 wire [15:0] layer6_N5_lut_4 = 16'h91E9;
 wire [15:0] layer6_N5_lut_5 = 16'hEEFE;
-assign M1[30] = layer6_N5_lut_0[layer6_N5_wire];
-assign M1[31] = layer6_N5_lut_1[layer6_N5_wire];
-assign M1[32] = layer6_N5_lut_2[layer6_N5_wire];
-assign M1[33] = layer6_N5_lut_3[layer6_N5_wire];
-assign M1[34] = layer6_N5_lut_4[layer6_N5_wire];
-assign M1[35] = layer6_N5_lut_5[layer6_N5_wire];
 
 wire [3:0] layer6_N6_wire = {M0[24], M0[25], M0[26], M0[27]};
 wire [15:0] layer6_N6_lut_0 = 16'hD723;
@@ -26509,12 +26473,6 @@ wire [15:0] layer6_N6_lut_2 = 16'h2004;
 wire [15:0] layer6_N6_lut_3 = 16'h6992;
 wire [15:0] layer6_N6_lut_4 = 16'hB224;
 wire [15:0] layer6_N6_lut_5 = 16'hFFFB;
-assign M1[36] = layer6_N6_lut_0[layer6_N6_wire];
-assign M1[37] = layer6_N6_lut_1[layer6_N6_wire];
-assign M1[38] = layer6_N6_lut_2[layer6_N6_wire];
-assign M1[39] = layer6_N6_lut_3[layer6_N6_wire];
-assign M1[40] = layer6_N6_lut_4[layer6_N6_wire];
-assign M1[41] = layer6_N6_lut_5[layer6_N6_wire];
 
 wire [3:0] layer6_N7_wire = {M0[28], M0[29], M0[30], M0[31]};
 wire [15:0] layer6_N7_lut_0 = 16'hDEDC;
@@ -26523,12 +26481,6 @@ wire [15:0] layer6_N7_lut_2 = 16'h0800;
 wire [15:0] layer6_N7_lut_3 = 16'h6986;
 wire [15:0] layer6_N7_lut_4 = 16'h8E18;
 wire [15:0] layer6_N7_lut_5 = 16'hFFEF;
-assign M1[42] = layer6_N7_lut_0[layer6_N7_wire];
-assign M1[43] = layer6_N7_lut_1[layer6_N7_wire];
-assign M1[44] = layer6_N7_lut_2[layer6_N7_wire];
-assign M1[45] = layer6_N7_lut_3[layer6_N7_wire];
-assign M1[46] = layer6_N7_lut_4[layer6_N7_wire];
-assign M1[47] = layer6_N7_lut_5[layer6_N7_wire];
 
 wire [3:0] layer6_N8_wire = {M0[32], M0[33], M0[34], M0[35]};
 wire [15:0] layer6_N8_lut_0 = 16'h6982;
@@ -26537,12 +26489,6 @@ wire [15:0] layer6_N8_lut_2 = 16'hE8FE;
 wire [15:0] layer6_N8_lut_3 = 16'h8068;
 wire [15:0] layer6_N8_lut_4 = 16'h0180;
 wire [15:0] layer6_N8_lut_5 = 16'hFEFF;
-assign M1[48] = layer6_N8_lut_0[layer6_N8_wire];
-assign M1[49] = layer6_N8_lut_1[layer6_N8_wire];
-assign M1[50] = layer6_N8_lut_2[layer6_N8_wire];
-assign M1[51] = layer6_N8_lut_3[layer6_N8_wire];
-assign M1[52] = layer6_N8_lut_4[layer6_N8_wire];
-assign M1[53] = layer6_N8_lut_5[layer6_N8_wire];
 
 wire [3:0] layer6_N9_wire = {M0[36], M0[37], M0[38], M0[39]};
 wire [15:0] layer6_N9_lut_0 = 16'h2AFC;
@@ -26551,12 +26497,70 @@ wire [15:0] layer6_N9_lut_2 = 16'h0000;
 wire [15:0] layer6_N9_lut_3 = 16'h6896;
 wire [15:0] layer6_N9_lut_4 = 16'h81E8;
 wire [15:0] layer6_N9_lut_5 = 16'hFEFF;
-assign M1[54] = layer6_N9_lut_0[layer6_N9_wire];
-assign M1[55] = layer6_N9_lut_1[layer6_N9_wire];
-assign M1[56] = layer6_N9_lut_2[layer6_N9_wire];
-assign M1[57] = layer6_N9_lut_3[layer6_N9_wire];
-assign M1[58] = layer6_N9_lut_4[layer6_N9_wire];
-assign M1[59] = layer6_N9_lut_5[layer6_N9_wire];
+// note: outputs have been permuted to match outputs with
+// sorted class names, which wasn't the case in the original model
+// permutation new output index -> old output index:
+// 0 -> 8, 1 -> 5, 2 -> 0, 3 -> 9, 4 -> 2, 5 -> 7, 6 -> 3, 7 -> 1, 8 -> 6, 9 -> 4
+assign M1[0] = layer6_N8_lut_0[layer6_N8_wire];
+assign M1[1] = layer6_N8_lut_1[layer6_N8_wire];
+assign M1[2] = layer6_N8_lut_2[layer6_N8_wire];
+assign M1[3] = layer6_N8_lut_3[layer6_N8_wire];
+assign M1[4] = layer6_N8_lut_4[layer6_N8_wire];
+assign M1[5] = layer6_N8_lut_5[layer6_N8_wire];
+assign M1[6] = layer6_N5_lut_0[layer6_N5_wire];
+assign M1[7] = layer6_N5_lut_1[layer6_N5_wire];
+assign M1[8] = layer6_N5_lut_2[layer6_N5_wire];
+assign M1[9] = layer6_N5_lut_3[layer6_N5_wire];
+assign M1[10] = layer6_N5_lut_4[layer6_N5_wire];
+assign M1[11] = layer6_N5_lut_5[layer6_N5_wire];
+assign M1[12] = layer6_N0_lut_0[layer6_N0_wire];
+assign M1[13] = layer6_N0_lut_1[layer6_N0_wire];
+assign M1[14] = layer6_N0_lut_2[layer6_N0_wire];
+assign M1[15] = layer6_N0_lut_3[layer6_N0_wire];
+assign M1[16] = layer6_N0_lut_4[layer6_N0_wire];
+assign M1[17] = layer6_N0_lut_5[layer6_N0_wire];
+assign M1[18] = layer6_N9_lut_0[layer6_N9_wire];
+assign M1[19] = layer6_N9_lut_1[layer6_N9_wire];
+assign M1[20] = layer6_N9_lut_2[layer6_N9_wire];
+assign M1[21] = layer6_N9_lut_3[layer6_N9_wire];
+assign M1[22] = layer6_N9_lut_4[layer6_N9_wire];
+assign M1[23] = layer6_N9_lut_5[layer6_N9_wire];
+assign M1[24] = layer6_N2_lut_0[layer6_N2_wire];
+assign M1[25] = layer6_N2_lut_1[layer6_N2_wire];
+assign M1[26] = layer6_N2_lut_2[layer6_N2_wire];
+assign M1[27] = layer6_N2_lut_3[layer6_N2_wire];
+assign M1[28] = layer6_N2_lut_4[layer6_N2_wire];
+assign M1[29] = layer6_N2_lut_5[layer6_N2_wire];
+assign M1[30] = layer6_N7_lut_0[layer6_N7_wire];
+assign M1[31] = layer6_N7_lut_1[layer6_N7_wire];
+assign M1[32] = layer6_N7_lut_2[layer6_N7_wire];
+assign M1[33] = layer6_N7_lut_3[layer6_N7_wire];
+assign M1[34] = layer6_N7_lut_4[layer6_N7_wire];
+assign M1[35] = layer6_N7_lut_5[layer6_N7_wire];
+assign M1[36] = layer6_N3_lut_0[layer6_N3_wire];
+assign M1[37] = layer6_N3_lut_1[layer6_N3_wire];
+assign M1[38] = layer6_N3_lut_2[layer6_N3_wire];
+assign M1[39] = layer6_N3_lut_3[layer6_N3_wire];
+assign M1[40] = layer6_N3_lut_4[layer6_N3_wire];
+assign M1[41] = layer6_N3_lut_5[layer6_N3_wire];
+assign M1[42] = layer6_N1_lut_0[layer6_N1_wire];
+assign M1[43] = layer6_N1_lut_1[layer6_N1_wire];
+assign M1[44] = layer6_N1_lut_2[layer6_N1_wire];
+assign M1[45] = layer6_N1_lut_3[layer6_N1_wire];
+assign M1[46] = layer6_N1_lut_4[layer6_N1_wire];
+assign M1[47] = layer6_N1_lut_5[layer6_N1_wire];
+assign M1[48] = layer6_N6_lut_0[layer6_N6_wire];
+assign M1[49] = layer6_N6_lut_1[layer6_N6_wire];
+assign M1[50] = layer6_N6_lut_2[layer6_N6_wire];
+assign M1[51] = layer6_N6_lut_3[layer6_N6_wire];
+assign M1[52] = layer6_N6_lut_4[layer6_N6_wire];
+assign M1[53] = layer6_N6_lut_5[layer6_N6_wire];
+assign M1[54] = layer6_N4_lut_0[layer6_N4_wire];
+assign M1[55] = layer6_N4_lut_1[layer6_N4_wire];
+assign M1[56] = layer6_N4_lut_2[layer6_N4_wire];
+assign M1[57] = layer6_N4_lut_3[layer6_N4_wire];
+assign M1[58] = layer6_N4_lut_4[layer6_N4_wire];
+assign M1[59] = layer6_N4_lut_5[layer6_N4_wire];
 
 endmodule
 module myreg #(parameter DataWidth=16) (
@@ -26605,3 +26609,4 @@ layer6 layer6_inst (.M0(M6w), .M1(M7));
 
 endmodule
 
+ 

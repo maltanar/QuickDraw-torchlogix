@@ -16022,34 +16022,34 @@ module circuit (
     always @(*) begin
         s_0 = 0;
         for (i = 0; i < 398; i = i + 1) s_0 = s_0 + raw[i];
-        scores_flat[0*32 +: 32] = s_0;
+        scores_flat[0*32 +: 32] = s_8;
         s_1 = 0;
         for (i = 398; i < 798; i = i + 1) s_1 = s_1 + raw[i];
-        scores_flat[1*32 +: 32] = s_1;
+        scores_flat[1*32 +: 32] = s_5;
         s_2 = 0;
         for (i = 798; i < 1198; i = i + 1) s_2 = s_2 + raw[i];
-        scores_flat[2*32 +: 32] = s_2;
+        scores_flat[2*32 +: 32] = s_0;
         s_3 = 0;
         for (i = 1198; i < 1597; i = i + 1) s_3 = s_3 + raw[i];
-        scores_flat[3*32 +: 32] = s_3;
+        scores_flat[3*32 +: 32] = s_9;
         s_4 = 0;
         for (i = 1597; i < 1996; i = i + 1) s_4 = s_4 + raw[i];
-        scores_flat[4*32 +: 32] = s_4;
+        scores_flat[4*32 +: 32] = s_2;
         s_5 = 0;
         for (i = 1996; i < 2396; i = i + 1) s_5 = s_5 + raw[i];
-        scores_flat[5*32 +: 32] = s_5;
+        scores_flat[5*32 +: 32] = s_7;
         s_6 = 0;
         for (i = 2396; i < 2796; i = i + 1) s_6 = s_6 + raw[i];
-        scores_flat[6*32 +: 32] = s_6;
+        scores_flat[6*32 +: 32] = s_3;
         s_7 = 0;
         for (i = 2796; i < 3196; i = i + 1) s_7 = s_7 + raw[i];
-        scores_flat[7*32 +: 32] = s_7;
+        scores_flat[7*32 +: 32] = s_1;
         s_8 = 0;
         for (i = 3196; i < 3595; i = i + 1) s_8 = s_8 + raw[i];
-        scores_flat[8*32 +: 32] = s_8;
+        scores_flat[8*32 +: 32] = s_6;
         s_9 = 0;
         for (i = 3595; i < 3995; i = i + 1) s_9 = s_9 + raw[i];
-        scores_flat[9*32 +: 32] = s_9;
+        scores_flat[9*32 +: 32] = s_4;
     end
 
 endmodule
