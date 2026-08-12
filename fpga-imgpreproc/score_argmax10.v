@@ -1,36 +1,42 @@
-module score_argmax10 (
+module score_argmax10 #(
+  parameter integer N_SCORE_BITS = 6,
+  parameter integer N_CLASSES = 10
+) (
   input  wire        clk,
   input  wire        rst_n,
   input  wire        in_valid,
-  input  wire [59:0] scores,
+  input  wire [N_CLASSES*N_SCORE_BITS-1:0] scores,
   output reg         out_valid,
   output reg  [3:0]  max_idx
 );
 
-  function [5:0] class_score;
-    input [59:0] packed_scores;
+  localparam integer SCORE_WIDTH = N_CLASSES * N_SCORE_BITS;
+  localparam integer PAIR_WIDTH = N_SCORE_BITS + 4;
+
+  function [N_SCORE_BITS-1:0] class_score;
+    input [SCORE_WIDTH-1:0] packed_scores;
     input [3:0] class_idx;
     begin
       case (class_idx)
-        4'd0: class_score = packed_scores[5:0];
-        4'd1: class_score = packed_scores[11:6];
-        4'd2: class_score = packed_scores[17:12];
-        4'd3: class_score = packed_scores[23:18];
-        4'd4: class_score = packed_scores[29:24];
-        4'd5: class_score = packed_scores[35:30];
-        4'd6: class_score = packed_scores[41:36];
-        4'd7: class_score = packed_scores[47:42];
-        4'd8: class_score = packed_scores[53:48];
-        4'd9: class_score = packed_scores[59:54];
-        default: class_score = 6'd0;
+        4'd0: class_score = packed_scores[N_SCORE_BITS-1:0];
+        4'd1: class_score = packed_scores[2*N_SCORE_BITS-1:N_SCORE_BITS];
+        4'd2: class_score = packed_scores[3*N_SCORE_BITS-1:2*N_SCORE_BITS];
+        4'd3: class_score = packed_scores[4*N_SCORE_BITS-1:3*N_SCORE_BITS];
+        4'd4: class_score = packed_scores[5*N_SCORE_BITS-1:4*N_SCORE_BITS];
+        4'd5: class_score = packed_scores[6*N_SCORE_BITS-1:5*N_SCORE_BITS];
+        4'd6: class_score = packed_scores[7*N_SCORE_BITS-1:6*N_SCORE_BITS];
+        4'd7: class_score = packed_scores[8*N_SCORE_BITS-1:7*N_SCORE_BITS];
+        4'd8: class_score = packed_scores[9*N_SCORE_BITS-1:8*N_SCORE_BITS];
+        4'd9: class_score = packed_scores[10*N_SCORE_BITS-1:9*N_SCORE_BITS];
+        default: class_score = {N_SCORE_BITS{1'b0}};
       endcase
     end
   endfunction
 
-  function [9:0] max_pair;
-    input [5:0] a_val;
+  function [PAIR_WIDTH-1:0] max_pair;
+    input [N_SCORE_BITS-1:0] a_val;
     input [3:0] a_idx;
-    input [5:0] b_val;
+    input [N_SCORE_BITS-1:0] b_val;
     input [3:0] b_idx;
     begin
       if (b_val > a_val) begin
@@ -41,26 +47,26 @@ module score_argmax10 (
     end
   endfunction
 
-  reg [5:0] s1_v0, s1_v1, s1_v2, s1_v3, s1_v4;
+  reg [N_SCORE_BITS-1:0] s1_v0, s1_v1, s1_v2, s1_v3, s1_v4;
   reg [3:0] s1_i0, s1_i1, s1_i2, s1_i3, s1_i4;
-  reg [5:0] s2_v0, s2_v1, s2_v2;
+  reg [N_SCORE_BITS-1:0] s2_v0, s2_v1, s2_v2;
   reg [3:0] s2_i0, s2_i1, s2_i2;
-  reg [5:0] s3_v0, s3_v1;
+  reg [N_SCORE_BITS-1:0] s3_v0, s3_v1;
   reg [3:0] s3_i0, s3_i1;
 
   reg s1_valid;
   reg s2_valid;
   reg s3_valid;
 
-  wire [9:0] p0_comb;
-  wire [9:0] p1_comb;
-  wire [9:0] p2_comb;
-  wire [9:0] p3_comb;
-  wire [9:0] p4_comb;
-  wire [9:0] q0_comb;
-  wire [9:0] q1_comb;
-  wire [9:0] r0_comb;
-  wire [9:0] final_pair;
+  wire [PAIR_WIDTH-1:0] p0_comb;
+  wire [PAIR_WIDTH-1:0] p1_comb;
+  wire [PAIR_WIDTH-1:0] p2_comb;
+  wire [PAIR_WIDTH-1:0] p3_comb;
+  wire [PAIR_WIDTH-1:0] p4_comb;
+  wire [PAIR_WIDTH-1:0] q0_comb;
+  wire [PAIR_WIDTH-1:0] q1_comb;
+  wire [PAIR_WIDTH-1:0] r0_comb;
+  wire [PAIR_WIDTH-1:0] final_pair;
 
   assign p0_comb = max_pair(class_score(scores, 4'd0), 4'd0, class_score(scores, 4'd1), 4'd1);
   assign p1_comb = max_pair(class_score(scores, 4'd2), 4'd2, class_score(scores, 4'd3), 4'd3);
@@ -75,24 +81,24 @@ module score_argmax10 (
 
   always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-      s1_v0 <= 6'd0;
-      s1_v1 <= 6'd0;
-      s1_v2 <= 6'd0;
-      s1_v3 <= 6'd0;
-      s1_v4 <= 6'd0;
+      s1_v0 <= {N_SCORE_BITS{1'b0}};
+      s1_v1 <= {N_SCORE_BITS{1'b0}};
+      s1_v2 <= {N_SCORE_BITS{1'b0}};
+      s1_v3 <= {N_SCORE_BITS{1'b0}};
+      s1_v4 <= {N_SCORE_BITS{1'b0}};
       s1_i0 <= 4'd0;
       s1_i1 <= 4'd0;
       s1_i2 <= 4'd0;
       s1_i3 <= 4'd0;
       s1_i4 <= 4'd0;
-      s2_v0 <= 6'd0;
-      s2_v1 <= 6'd0;
-      s2_v2 <= 6'd0;
+      s2_v0 <= {N_SCORE_BITS{1'b0}};
+      s2_v1 <= {N_SCORE_BITS{1'b0}};
+      s2_v2 <= {N_SCORE_BITS{1'b0}};
       s2_i0 <= 4'd0;
       s2_i1 <= 4'd0;
       s2_i2 <= 4'd0;
-      s3_v0 <= 6'd0;
-      s3_v1 <= 6'd0;
+      s3_v0 <= {N_SCORE_BITS{1'b0}};
+      s3_v1 <= {N_SCORE_BITS{1'b0}};
       s3_i0 <= 4'd0;
       s3_i1 <= 4'd0;
       max_idx <= 4'd0;
@@ -108,29 +114,29 @@ module score_argmax10 (
       out_valid <= s3_valid;
 
       if (in_valid) begin
-        s1_v0 <= p0_comb[9:4];
+        s1_v0 <= p0_comb[PAIR_WIDTH-1:4];
         s1_i0 <= p0_comb[3:0];
-        s1_v1 <= p1_comb[9:4];
+        s1_v1 <= p1_comb[PAIR_WIDTH-1:4];
         s1_i1 <= p1_comb[3:0];
-        s1_v2 <= p2_comb[9:4];
+        s1_v2 <= p2_comb[PAIR_WIDTH-1:4];
         s1_i2 <= p2_comb[3:0];
-        s1_v3 <= p3_comb[9:4];
+        s1_v3 <= p3_comb[PAIR_WIDTH-1:4];
         s1_i3 <= p3_comb[3:0];
-        s1_v4 <= p4_comb[9:4];
+        s1_v4 <= p4_comb[PAIR_WIDTH-1:4];
         s1_i4 <= p4_comb[3:0];
       end
 
       if (s1_valid) begin
-        s2_v0 <= q0_comb[9:4];
+        s2_v0 <= q0_comb[PAIR_WIDTH-1:4];
         s2_i0 <= q0_comb[3:0];
-        s2_v1 <= q1_comb[9:4];
+        s2_v1 <= q1_comb[PAIR_WIDTH-1:4];
         s2_i1 <= q1_comb[3:0];
         s2_v2 <= s1_v4;
         s2_i2 <= s1_i4;
       end
 
       if (s2_valid) begin
-        s3_v0 <= r0_comb[9:4];
+        s3_v0 <= r0_comb[PAIR_WIDTH-1:4];
         s3_i0 <= r0_comb[3:0];
         s3_v1 <= s2_v2;
         s3_i1 <= s2_i2;

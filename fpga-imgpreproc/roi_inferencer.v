@@ -1,7 +1,9 @@
 `include "../verilog/neuralut_lut4_79.54.v"
 
 module roi_inferencer #(
-  parameter [3:0] NN_LATENCY = 4'd8
+  parameter [3:0] NN_LATENCY = 4'd8,
+  parameter integer N_SCORE_BITS = 6,
+  parameter integer N_CLASSES = 10
 ) (
   input  wire         clk,
   input  wire         rst_n,
@@ -9,11 +11,13 @@ module roi_inferencer #(
   input  wire [783:0] roi_bits,
   output wire [783:0] nn_input_dbg,
   output reg          done,
-  output reg  [59:0]  scores
+  output reg  [N_CLASSES*N_SCORE_BITS-1:0] scores
 );
 
+  localparam integer SCORE_WIDTH = N_CLASSES * N_SCORE_BITS;
+
   reg [783:0] nn_input;
-  wire [59:0] nn_scores;
+  wire [SCORE_WIDTH-1:0] nn_scores;
 
   reg       busy;
   reg [3:0] wait_ctr;
@@ -31,7 +35,7 @@ module roi_inferencer #(
     if (!rst_n) begin
       nn_input  <= 784'd0;
       done      <= 1'b0;
-      scores    <= 60'd0;
+      scores    <= {SCORE_WIDTH{1'b0}};
       busy      <= 1'b0;
       wait_ctr  <= 4'd0;
     end else begin

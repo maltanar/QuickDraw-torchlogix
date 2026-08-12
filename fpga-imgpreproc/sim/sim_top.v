@@ -18,6 +18,10 @@ module sim_top (
   output wire        sim_vga_in_display
 );
 
+  localparam integer N_SCORE_BITS = 6;
+  localparam integer N_CLASSES = 10;
+  localparam integer SCORE_WIDTH = N_CLASSES * N_SCORE_BITS;
+
   // Instantiate the main top module with only camera and VGA inputs/outputs
   // All other outputs (cam_RESET, cam_XCLK, etc.) are not needed for simulation
   
@@ -37,7 +41,7 @@ module sim_top (
   wire [3:0] label_idx;
   wire nn_start;
   wire nn_done;
-  wire [59:0] nn_scores;
+  wire [SCORE_WIDTH-1:0] nn_scores;
   wire [783:0] nn_input_dbg;
   wire nn_best_valid;
   wire [3:0] nn_best_idx;
@@ -163,7 +167,10 @@ module sim_top (
     .dump_o_ready(roi_dump_o_ready)
   );
 
-  roi_inferencer roi_inferencer_i (
+  roi_inferencer #(
+    .N_SCORE_BITS(N_SCORE_BITS),
+    .N_CLASSES(N_CLASSES)
+  ) roi_inferencer_i (
     .clk(clk_25MHz),
     .rst_n(rst_n),
     .start(nn_start),
@@ -173,7 +180,10 @@ module sim_top (
     .scores(nn_scores)
   );
 
-  score_argmax10 score_argmax10_i (
+  score_argmax10 #(
+    .N_SCORE_BITS(N_SCORE_BITS),
+    .N_CLASSES(N_CLASSES)
+  ) score_argmax10_i (
     .clk(clk_25MHz),
     .rst_n(rst_n),
     .in_valid(nn_done),
