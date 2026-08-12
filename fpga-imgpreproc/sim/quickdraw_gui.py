@@ -117,7 +117,7 @@ class CameraCanvas(QFrame):
 class VGADisplay(QFrame):
     """Display for VGA output"""
     
-    def __init__(self, width=160, height=240):
+    def __init__(self, width=640, height=480):
         super().__init__()
         self.width = width
         self.height = height
@@ -128,22 +128,19 @@ class VGADisplay(QFrame):
         self.flip_h = False
         self.flip_v = False
         
-        # Each logical pixel is 4x wide × 2x tall in physical VGA pixels,
-        # so display 2× wider than the logical pixel count to maintain 4:3.
-        self.setMinimumSize(width * 2 * self.scale, height * self.scale)
-        self.setMaximumSize(width * 2 * self.scale, height * self.scale)
+        self.setMinimumSize(width * self.scale, height * self.scale)
+        self.setMaximumSize(width * self.scale, height * self.scale)
         self.setStyleSheet("border: 2px solid green;")
     
     def set_scale(self, scale):
         self.scale = scale
-        self.setMinimumSize(self.width * 2 * scale, self.height * scale)
-        self.setMaximumSize(self.width * 2 * scale, self.height * scale)
+        self.setMinimumSize(self.width * scale, self.height * scale)
+        self.setMaximumSize(self.width * scale, self.height * scale)
         self.update()
     
     def paintEvent(self, event):
-        """Paint the VGA display, correcting for VGA pixel aspect ratio (4:3)"""
         painter = QPainter(self)
-        painter.drawImage(QRect(0, 0, self.width * 2 * self.scale, self.height * self.scale),
+        painter.drawImage(QRect(0, 0, self.width * self.scale, self.height * self.scale),
                           self.display_image)
     
     def update_from_rgb444(self, frame_data):
@@ -159,10 +156,9 @@ class VGADisplay(QFrame):
         
         # Draw all pixels in the new frame
         for addr, rgb444 in frame_data.items():
-            # sim_vga_pix_addr is linear VGA address: addr = y * 640 + x.
-            # Convert 640x480 scanout to 160x240 logical display by 4x2 decimation.
-            x = (addr % 640) // 4
-            y = (addr // 640) // 2
+            # sim_vga_pix_addr is linear VGA address: addr = y * 640 + x
+            x = addr % 640
+            y = addr // 640
             
             # Convert RGB444 to RGB888
             r = ((rgb444 >> 8) & 0xF) * 17
@@ -266,7 +262,7 @@ class QuickDrawSimulator(QMainWindow):
         # Right side: Output display and UART
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel("VGA Output"))
-        self.vga_display = VGADisplay(160, 240)
+        self.vga_display = VGADisplay(640, 480)
         right_layout.addWidget(self.vga_display)
         
         flip_row = QHBoxLayout()
