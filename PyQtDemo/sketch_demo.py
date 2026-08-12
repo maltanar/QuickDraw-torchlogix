@@ -32,37 +32,20 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 
 DEFAULT_CLASSES = [
-    "bicycle",
-    "eyeglasses",
-    "car",
-    "eye",
-    "tree",
-    "apple",
-    "smiley_face",
-    "cell_phone",
     "airplane",
+    "apple",
+    "bicycle",
     "book",
+    "car",
+    "cell_phone",
+    "eye",
+    "eyeglasses",
+    "smiley_face",
+    "tree",
 ]
 
 
-def load_class_names(class_names_path: Path) -> list[str]:
-    classes: list[str] = []
-    try:
-        with class_names_path.open("r", encoding="utf-8") as f:
-            for raw_line in f:
-                line = raw_line.strip()
-                if not line:
-                    continue
-                if line.startswith("class name:"):
-                    # Format: class name: <name>\t\tnumber of samples: <n>
-                    class_part = line.split("class name:", 1)[1]
-                    class_name = class_part.split("number of samples:", 1)[0].strip()
-                    if class_name:
-                        classes.append(class_name)
-        if len(classes) == 10:
-            return classes
-    except OSError:
-        pass
+def load_class_names() -> list[str]:
     return DEFAULT_CLASSES
 
 
@@ -229,8 +212,7 @@ class MainWindow(QMainWindow):
         self.verilated_cache_root = project_root / "verilated"
         self.top_module_name = "neuralut"
         neuralut_root = project_root.parent / "NeuraLUT"
-        self.class_names_path = neuralut_root / "datasets" / "quickdraw_10class" / "verilog" / "class_names.txt"
-        self.classes = load_class_names(self.class_names_path)
+        self.classes = load_class_names()
         self.sim = None
 
         # Central widget
