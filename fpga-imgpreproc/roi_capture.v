@@ -135,13 +135,24 @@ module roi_capture #(
   // Clear the buffer at frame end so stale ink does not persist.
   reg [6:0] clear_cnt;
   reg       clearing;
+  reg       clear_pending;
+
+  // One-cycle write pipeline to reduce data_clk critical path.
+  reg       wr_en_d;
+  reg [9:0] wr_addr_d;
+  reg       wr_pixel_d;
 
   always @(posedge data_clk or negedge data_rst_n) begin
     if (!data_rst_n) begin
-      clearing  <= 1'b1;
-      clear_cnt <= 7'd0;
+      clearing       <= 1'b1;
+      clear_cnt      <= 7'd0;
+      clear_pending  <= 1'b0;
+      wr_en_d        <= 1'b0;
+      wr_addr_d      <= 10'd0;
+      wr_pixel_d     <= 1'b0;
     end else if (clearing) begin
       roi_buf[clear_cnt] <= 8'd0;
+      wr_en_d <= 1'b0;
       if (clear_cnt == 7'd97) begin
         clearing  <= 1'b0;
         clear_cnt <= 7'd0;
@@ -149,12 +160,26 @@ module roi_capture #(
         clear_cnt <= clear_cnt + 7'd1;
       end
     end else begin
+      // Commit delayed write from the prior cycle.
+      if (wr_en_d)
+        roi_buf[wr_addr_d >> 3][wr_addr_d & 7] <= wr_pixel_d;
+
       if (s_valid && s_tlast) begin
-        clearing  <= 1'b1;
-        clear_cnt <= 7'd0;
+        clear_pending <= 1'b1;
       end
-      if (pix_in_roi && pix_is_sample)
-        roi_buf[wr_addr >> 3][wr_addr & 7] <= s_pixel;
+
+      if (clear_pending) begin
+        // Start clearing one cycle later so a final queued write can commit.
+        clearing       <= 1'b1;
+        clear_cnt      <= 7'd0;
+        clear_pending  <= 1'b0;
+        wr_en_d        <= 1'b0;
+      end else begin
+        // Queue current-cycle write for next cycle commit.
+        wr_en_d    <= pix_in_roi && pix_is_sample;
+        wr_addr_d  <= wr_addr;
+        wr_pixel_d <= s_pixel;
+      end
     end
   end
 
