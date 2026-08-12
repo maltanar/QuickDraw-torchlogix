@@ -247,109 +247,33 @@ module renderer (
     end
   endfunction
 
+  reg [8*MAX_NAME_LEN-1:0] CLASS_NAME_TABLE [0:9];
+  initial begin
+    CLASS_NAME_TABLE[0] = "bicycle    ";
+    CLASS_NAME_TABLE[1] = "eyeglasses ";
+    CLASS_NAME_TABLE[2] = "car        ";
+    CLASS_NAME_TABLE[3] = "eye        ";
+    CLASS_NAME_TABLE[4] = "tree       ";
+    CLASS_NAME_TABLE[5] = "apple      ";
+    CLASS_NAME_TABLE[6] = "smiley_face";
+    CLASS_NAME_TABLE[7] = "cell_phone ";
+    CLASS_NAME_TABLE[8] = "airplane   ";
+    CLASS_NAME_TABLE[9] = "book       ";
+  end
+
   function [7:0] class_char;
     input [3:0] cls;
     input [3:0] pos;
+    reg [8*MAX_NAME_LEN-1:0] class_name;
     begin
       class_char = 8'h20;
-      case (cls)
-        4'd0: case (pos) // bicycle
-          4'd0: class_char = "b";
-          4'd1: class_char = "i";
-          4'd2: class_char = "c";
-          4'd3: class_char = "y";
-          4'd4: class_char = "c";
-          4'd5: class_char = "l";
-          4'd6: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd1: case (pos) // eyeglasses
-          4'd0: class_char = "e";
-          4'd1: class_char = "y";
-          4'd2: class_char = "e";
-          4'd3: class_char = "g";
-          4'd4: class_char = "l";
-          4'd5: class_char = "a";
-          4'd6: class_char = "s";
-          4'd7: class_char = "s";
-          4'd8: class_char = "e";
-          4'd9: class_char = "s";
-          default: class_char = 8'h20;
-        endcase
-        4'd2: case (pos) // car
-          4'd0: class_char = "c";
-          4'd1: class_char = "a";
-          4'd2: class_char = "r";
-          default: class_char = 8'h20;
-        endcase
-        4'd3: case (pos) // eye
-          4'd0: class_char = "e";
-          4'd1: class_char = "y";
-          4'd2: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd4: case (pos) // tree
-          4'd0: class_char = "t";
-          4'd1: class_char = "r";
-          4'd2: class_char = "e";
-          4'd3: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd5: case (pos) // apple
-          4'd0: class_char = "a";
-          4'd1: class_char = "p";
-          4'd2: class_char = "p";
-          4'd3: class_char = "l";
-          4'd4: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd6: case (pos) // smiley_face
-          4'd0: class_char = "s";
-          4'd1: class_char = "m";
-          4'd2: class_char = "i";
-          4'd3: class_char = "l";
-          4'd4: class_char = "e";
-          4'd5: class_char = "y";
-          4'd6: class_char = "_";
-          4'd7: class_char = "f";
-          4'd8: class_char = "a";
-          4'd9: class_char = "c";
-          4'd10: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd7: case (pos) // cell_phone
-          4'd0: class_char = "c";
-          4'd1: class_char = "e";
-          4'd2: class_char = "l";
-          4'd3: class_char = "l";
-          4'd4: class_char = "_";
-          4'd5: class_char = "p";
-          4'd6: class_char = "h";
-          4'd7: class_char = "o";
-          4'd8: class_char = "n";
-          4'd9: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd8: case (pos) // airplane
-          4'd0: class_char = "a";
-          4'd1: class_char = "i";
-          4'd2: class_char = "r";
-          4'd3: class_char = "p";
-          4'd4: class_char = "l";
-          4'd5: class_char = "a";
-          4'd6: class_char = "n";
-          4'd7: class_char = "e";
-          default: class_char = 8'h20;
-        endcase
-        4'd9: case (pos) // book
-          4'd0: class_char = "b";
-          4'd1: class_char = "o";
-          4'd2: class_char = "o";
-          4'd3: class_char = "k";
-          default: class_char = 8'h20;
-        endcase
-        default: class_char = 8'h20;
-      endcase
+      class_name = {8*MAX_NAME_LEN{1'b0}};
+      if (cls <= 4'd9) begin
+        class_name = CLASS_NAME_TABLE[cls];
+        if (pos < MAX_NAME_LEN) begin
+          class_char = class_name[((MAX_NAME_LEN - 4'd1 - pos) * 8) +: 8];
+        end
+      end
     end
   endfunction
 
