@@ -63,7 +63,6 @@ Checkpoints/
 *.pt
 *.pth
 *.onnx
-*.c
 
 # Generated datasets / binaries
 Dataset/*.npz

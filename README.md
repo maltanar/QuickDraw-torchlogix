@@ -1,6 +1,17 @@
-# QuickDraw-brevitas
+# QuickDraw Logic Neural Networks on GateMate
 
-Train Quick, Draw! classifiers with PyTorch and run quantization-aware training (QAT) with Brevitas. The repo is installable as a standard Python project in a virtual environment.
+This repository contains the training, Verilog export, and FPGA integration for a live Quick, Draw! sketch-recognition demo on the Olimex GateMate-A1 board. It uses [TorchLogix](https://github.com/maltanar/torchlogix) to train fan-in-constrained, quantized logic neural networks whose neurons map to FPGA LUTs and export as compact, feedforward RTL.
+
+The FPGA design accepts an OV7670 camera stream, thresholds it, extracts and downsizes a configurable region of interest to 28x28 pixels, classifies the sketch, and renders the result over VGA. The full system architecture, design-space exploration, and implementation results are described in the [project blog post](https://emlogic.no/2026/08/logic-neural-networks-on-the-gatemate-a1/).
+
+The repository provides the following workflows:
+
+1. **Train and export LNNs:** Use `main_logic.py` to train new TorchLogix logic neural networks, then export them to Verilog with `--export_verilog`.
+2. **Use generated LNN RTL:** [verilog](verilog) contains pre-generated Verilog implementations exported from trained LNNs.
+3. **Run the stand-alone GateMate demo:** [fpga-imgpreproc](fpga-imgpreproc) implements the GateMate-A1 OV7670-to-VGA sketch-recognition system described in the blog post, including a small emulator in [fpga-imgpreproc/sim](fpga-imgpreproc/sim).
+4. **Run the UART-connected LNN demo:** [fpga](fpga) implements an LNN connected over UART. Use it together with the PyQt GUI application in [PyQtDemo](PyQtDemo).
+
+The Python training tools are installable as a standard Python project in a virtual environment.
 
 ## Quick Start (venv)
 
@@ -12,10 +23,10 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 ```
 
-2. Install the project with all dependencies in editable mode.
+2. Install the project in editable mode.
 
 ```bash
-pip install -e ".[full]"
+pip install -e .
 ```
 
 ## Available CLI Commands
@@ -23,11 +34,8 @@ pip install -e ".[full]"
 Installing the project creates these commands:
 
 1. `quickdraw-prepare-data`
-2. `quickdraw-train`
-3. `quickdraw-qat-train`
-4. `quickdraw-logic-train`
-5. `quickdraw-logic-sweep`
-6. `quickdraw-convert-qdq-to-qop`
+2. `quickdraw-logic-train`
+3. `quickdraw-logic-sweep`
 
 ## Typical Local Workflow
 
@@ -37,32 +45,7 @@ Installing the project creates these commands:
 quickdraw-prepare-data --download 1 --categories 10 -v 0.2
 ```
 
-2. Run baseline (floating-point, should get ~95% accuracy) training for 5 epochs, and export to ONNX:
-
-```bash
-quickdraw-train --ngpu 0 -e 15 --export_onnx
-```
-
-3. Run QAT (8-bit quantization, should get ~95% accuracy) for 15 epochs, and export to QCDQ-formatted ONNX:
-
-```bash
-quickdraw-qat-train --ngpu 0 -e 15 --weight_bit_width 8 --act_bit_width 8 --quant_input --no_narrow_range  --export_qcdq
-```
-
-4. Convert QCDQ ONNX to QOperator ONNX:
-
-```bash
-quickdraw-convert-qdq-to-qop Checkpoints/model_8bit_qcdq.onnx Checkpoints/model_8bit_qop.onnx
-```
-
-5. (Optional) Generate C code (and executable stats) from an ONNX checkpoint:
-
-```bash
-bash codegen.sh model_w4a8_qop
-```
-
-`codegen.sh` takes the checkpoint **base name** under `Checkpoints/` (for example `model_w4a8_qop`), not a full `.onnx` filename.
-6. Run TorchLogix logic-NN training examples:
+2. Run TorchLogix logic-NN training examples:
 
 ```bash
 quickdraw-logic-train --dataset mnist --no-mnist_exact_example --batch_size 128 --test_bs 128 --optimizer adam --learning_rate 0.02 --weight_decay 0 --input_binarization none --ngpu 0 -e 10
@@ -105,47 +88,6 @@ quickdraw-logic-sweep --ngpu 0 --epochs 5 --conv_channels_grid "16|16,48|16,48,1
 ```
 
 The sweep writes per-trial logs and a global summary in `logic_sweep_logs/logic_sweep_summary.json`.
-
-## Existing Script Workflow
-
-After running `codegen.sh`:
-
-1. Generated model source is available at `codegen/<model-name>/model.c`.
-2. If `arm-zephyr-eabi-gcc` is available in `PATH`, a compiled executable is generated at `codegen/<model-name>/model` and deployment-oriented section stats are printed.
-
-Example (`codegen.sh` output excerpt):
-
-```text
-=== Executable Deployment Stats: codegen/model_w4a8_qop/model ===
-File size:                   542400 bytes (530KiB)
-Code segment (.text*):       183216 bytes (179KiB)
-Read-only vars (.rodata*):   331392 bytes (324KiB)
-Writable init data (.data*): 4096 bytes (4.0KiB)
-Zero-init data (.bss*):      1024 bytes (1.0KiB)
-Static RAM (.data + .bss):   5120 bytes (5.0KiB)
-Flash image estimate:        518704 bytes (507KiB)
-```
-
-If the ARM Zephyr toolchain is installed but not on `PATH`, add it before running:
-
-```bash
-export PATH="<zephyr-sdk>/arm-zephyr-eabi/bin:$PATH"
-```
-
-6. Run QAT (1-bit weights, 8-bit activations) for 50 eopchs and export to QONNX:
-
-```bash
-quickdraw-qat-train --ngpu 0 -e 50 --weight_bit_width 1 --act_bit_width 8 --quant_input  --export_qonnx --per_channel -lrs 5 -lrs 20
-```
-
-## Existing Script Workflow
-
-The shell helpers still work:
-
-```bash
-bash run_experiments.sh
-bash run_2bit_experiments.sh
-```
 
 ## Dataset Notes
 

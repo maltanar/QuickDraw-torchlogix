@@ -1,4 +1,4 @@
-"""Model definitions for QuickDraw-brevitas."""
+"""Model definitions for QuickDraw-torchlogix."""
 
 from .logic_nets import mnist_tutorial_logic_convnet, quickdraw_logic_convnet
 

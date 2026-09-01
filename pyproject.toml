@@ -3,14 +3,14 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "quickdraw-brevitas"
+name = "quickdraw-torchlogix"
 version = "0.1.0"
-description = "QuickDraw training and quantization-aware training with Brevitas"
+description = "QuickDraw logic neural network training and FPGA demos"
 readme = "README.md"
 requires-python = ">=3.9"
 license = { text = "MIT" }
 authors = [
-  { name = "QuickDraw-brevitas contributors" }
+  { name = "QuickDraw-torchlogix contributors" }
 ]
 dependencies = [
   "numpy>=1.23",
@@ -18,7 +18,7 @@ dependencies = [
   "torchvision>=0.16",
   "tqdm>=4.64",
   "matplotlib>=3.7",
-  "torchlogix @ git+https://github.com/ligerlac/torchlogix@main",
+  "torchlogix @ git+https://github.com/maltanar/torchlogix@feature/rank_gt_2_export",
   "pyverilator @ git+https://github.com/maltanar/pyverilator.git",
   "PyQt6>=6.11.0",
   "pyserial>=3.5"
@@ -31,7 +31,7 @@ quickdraw-logic-sweep = "sweep_logic_topology:main"
 quickdraw-prepare-data = "DataUtils.prepare_data:main"
 
 [tool.setuptools]
-py-modules = ["main", "main_qat", "main_logic", "sweep_logic_topology", "convert_qdq_to_qop"]
+py-modules = ["main", "main_logic", "sweep_logic_topology"]
 
 [tool.setuptools.packages.find]
 include = ["DataUtils*", "Model*"]

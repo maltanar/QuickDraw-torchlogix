@@ -1,1 +1,1 @@
-"""Data preparation and loading utilities for QuickDraw-brevitas."""
+"""Data preparation and loading utilities for QuickDraw-torchlogix."""
