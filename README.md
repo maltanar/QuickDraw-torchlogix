@@ -145,4 +145,8 @@ Note: integer class ids are assigned in the order files are loaded during datase
 3. [pytorch2keras](https://github.com/nerox8664/pytorch2keras)
 4. [Original QuickDraw-pytorch repository](https://github.com/XJay18/QuickDraw-pytorch)
 
+## AI-Assisted Development
+
+GitHub Copilot was used to develop parts of this project. Human feedback and iterative review guided design choices, implementation, and debugging throughout.
+
 
